@@ -68,8 +68,11 @@ typedef struct
 
 #ifdef SUPPORT_PCRE
 static const size_info_t size_info[] = {
-	{ L"1080p", 1920, 1080, ID_SIZE_HD },
-	{ L"720p", 1280, 720, ID_SIZE_SD },
+	{ L"8K", 7680, 4320, ID_SIZE_8KUHD },
+	{ L"4K", 3840, 2160, ID_SIZE_4KUHD },
+	{ L"1440p", 2560, 1440, ID_SIZE_WQHD },
+	{ L"1080p", 1920, 1080, ID_SIZE_FHD },
+	{ L"720p", 1280, 720, ID_SIZE_HD },
 	{ L"wvga", 832, 480, ID_SIZE_WVGA },
 	{ L"wqvga", 416, 240, ID_SIZE_WQVGA },
 	{ L"vga", 640, 480, ID_SIZE_VGA },
@@ -82,11 +85,20 @@ static const size_info_t size_info[] = {
 #else
 // in near future, update me to PCRE
 static const size_info_t size_info[] = {
-	{ L"1920x1080", 1920, 1080, ID_SIZE_HD },
-	{ L"1080p", 1920, 1080, ID_SIZE_HD },
+	{ L"7680x4320",7680, 4320, ID_SIZE_8K },
+	{ L"8k", 7680, 4320, ID_SIZE_8K },
 
-	{ L"1280x720", 1280, 720, ID_SIZE_SD },
-	{ L"720p", 1280, 720, ID_SIZE_SD },
+	{ L"3840x2160", 3840, 2160, ID_SIZE_4K },
+	{ L"4k", 3840, 2160, ID_SIZE_4K },
+
+	{ L"2560x1440", 2560, 1440, ID_SIZE_WQHD },
+	{ L"1440p", 2560, 1440, ID_SIZE_WQHD },
+
+	{ L"1920x1080", 1920, 1080, ID_SIZE_FHD },
+	{ L"1080p", 1920, 1080, ID_SIZE_FHD },
+
+	{ L"1280x720", 1280, 720, ID_SIZE_HD },
+	{ L"720p", 1280, 720, ID_SIZE_HD },
 
 	{ L"832x480", 832, 480, ID_SIZE_WVGA },
 	{ L"wvga", 832, 480, ID_SIZE_WVGA },
@@ -362,13 +374,28 @@ void CyuvplayerDlg::OnSizeChange(UINT nID )
 			menu->CheckMenuItem(i,	MF_UNCHECKED);
 
 	switch( nID ){
-		case ID_SIZE_HD:
-			menu->CheckMenuItem( ID_SIZE_HD,	MF_CHECKED);
+		case ID_SIZE_8K:
+			menu->CheckMenuItem(ID_SIZE_8K, MF_CHECKED);
+			Resize(7680, 4320);
+			return;
+
+		case ID_SIZE_4K:
+			menu->CheckMenuItem(ID_SIZE_4K, MF_CHECKED);
+			Resize(3840, 2160);
+			return;
+
+		case ID_SIZE_WQHD:
+			menu->CheckMenuItem(ID_SIZE_WQHD, MF_CHECKED);
+			Resize(2560, 1440);
+			return;
+
+		case ID_SIZE_FHD:
+			menu->CheckMenuItem(ID_SIZE_FHD, MF_CHECKED);
 			Resize( 1920, 1080 );
 			return;
 		
-		case ID_SIZE_SD:
-			menu->CheckMenuItem( ID_SIZE_SD,	MF_CHECKED);
+		case ID_SIZE_HD:
+			menu->CheckMenuItem(ID_SIZE_HD,	MF_CHECKED);
 			Resize( 1280, 720 );
 			return;	
 
@@ -447,6 +474,11 @@ void CyuvplayerDlg::OnZoom(UINT nID )
 		case ID_ZOOM_14:
 			menu->CheckMenuItem( ID_ZOOM_14, MF_CHECKED);
 			ratio = 0.25;
+			break;
+
+		case ID_ZOOM_18:
+			menu->CheckMenuItem(ID_ZOOM_18, MF_CHECKED);
+			ratio = 0.125;
 			break;
 	}
 	Resize( width, height );
@@ -1011,10 +1043,12 @@ BOOL CyuvplayerDlg::PreTranslateMessage(MSG* pMsg)
                     OnZoom(ID_ZOOM_21);
                 else if( ratio > 0.4 )
                     OnZoom(ID_ZOOM_11);
-				else if( ratio > 0.4 )
-					OnZoom(ID_ZOOM_11);
-				else 
+				else if( ratio > 0.2 )
 					OnZoom(ID_ZOOM_12);
+				else if (ratio > 0.1)
+					OnZoom(ID_ZOOM_14);
+				else 
+					OnZoom(ID_ZOOM_18);
 
 				return TRUE;
 
@@ -1049,14 +1083,14 @@ BOOL CyuvplayerDlg::PreTranslateMessage(MSG* pMsg)
 				OnOpen();
 				return TRUE;
 
+			case 'f':
+			case 'F':
+				OnSizeChange(ID_SIZE_FHD);
+				return TRUE;
+
 			case 'h':
 			case 'H':
 				OnSizeChange(ID_SIZE_HD);
-				return TRUE;
-
-			case 's':
-			case 'S':
-				OnSizeChange(ID_SIZE_SD);
 				return TRUE;
 
 			case 'c':
@@ -1147,7 +1181,7 @@ void CyuvplayerDlg::FileOpen( wchar_t* path )
 	wcstol(file, &end, 0);
 
 #ifdef SUPPORT_PCRE
-	regex = pcre16_compile((PCRE_SPTR16)L"_(1080p|720p|wvga|wqvga|vga|qcif|cif|[1-9][0-9]*[x][1-9][0-9]*)_", PCRE_UTF16, &err, &err_offset, NULL);
+	regex = pcre16_compile((PCRE_SPTR16)L"_(8k|4k|1440p|1080p|720p|wvga|wqvga|vga|qcif|cif|[1-9][0-9]*[x][1-9][0-9]*)_", PCRE_UTF16, &err, &err_offset, NULL);
 
 	if (regex)
 	{

@@ -182,8 +182,11 @@ BEGIN
     END
     POPUP "&Size"
     BEGIN
-        MENUITEM "1080P (1920x1080)",           ID_SIZE_HD
-        MENUITEM "720P  (1280x720)",            ID_SIZE_SD
+        MENUITEM "8K (7680x4320)"               ID_SIZE_8K
+        MENUITEM "4K (3840x2160)",              ID_SIZE_4K
+        MENUITEM "1440P (2560x1440)",           ID_SIZE_WQHD
+        MENUITEM "1080P (1920x1080)",           ID_SIZE_FHD
+        MENUITEM "720P  (1280x720)",            ID_SIZE_HD
         MENUITEM "&VGA   (640x480)",            ID_SIZE_VGA
         MENUITEM SEPARATOR
         MENUITEM "&WVGA   (832x480)",           ID_SIZE_WVGA
@@ -211,9 +214,9 @@ BEGIN
         MENUITEM "NV12",                        ID_COLOR_NV12
         MENUITEM "NV21",                        ID_COLOR_NV21
         MENUITEM SEPARATOR
-        MENUITEM "RGB32",                       ID_COLOR_RGB32
-        MENUITEM "RGB24",                       ID_COLOR_RGB24
-        MENUITEM "RGB16",                       ID_COLOR_RGB16
+        MENUITEM "RGB32(RGBA8888)",             ID_COLOR_RGB32
+        MENUITEM "RGB24(RGB888)",               ID_COLOR_RGB24
+        MENUITEM "RGB16(RGB565)",               ID_COLOR_RGB16
     END
     POPUP "&Zoom"
     BEGIN
@@ -222,6 +225,7 @@ BEGIN
         MENUITEM "&1:1",                        ID_ZOOM_11, CHECKED
         MENUITEM "1:2",                         ID_ZOOM_12
         MENUITEM "1:4",                         ID_ZOOM_14
+        MENUITEM "1:8",                         ID_ZOOM_18
     END
     POPUP "Segment"
     BEGIN
