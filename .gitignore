@@ -1,6 +1,9 @@
 .vs/
 Backup/
 Debug/
+Release/
 UpgradeLog.htm
 yuvplayer/Debug/
+yuvplayer/Release/
 yuvplayer/yuvplayer.vcxproj.user
+
