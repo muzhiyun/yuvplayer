@@ -143,6 +143,13 @@ CyuvplayerDlg::CyuvplayerDlg(CWnd* pParent /*=NULL*/)
 	count = cur = 0;
 	started = FALSE;
 
+	// New options
+	m_colorRange = COLOR_RANGE_LIMITED;
+	m_colorMatrix = COLOR_MATRIX_BT601;
+	m_verticalFlip = FALSE;
+
+	InitYuv2rgbLUT();
+
 	filename = new wchar_t[MAX_PATH_LEN];
 	wsprintf(filename, L"%s", L"YUV player");
 
@@ -169,6 +176,9 @@ BEGIN_MESSAGE_MAP(CyuvplayerDlg, CDialog)
 	ON_COMMAND_RANGE(ID_COLOR_START, ID_COLOR_END, OnColor)
 	ON_COMMAND_RANGE(ID_ZOOM_START,  ID_ZOOM_END,  OnZoom)
 	ON_COMMAND_RANGE(ID_SEGMENT_START, ID_SEGMENT_END, OnSegment)
+	ON_COMMAND_RANGE(ID_RANGE_START, ID_RANGE_END, OnColorRange)
+	ON_COMMAND_RANGE(ID_MATRIX_START, ID_MATRIX_END, OnColorMatrix)
+	ON_COMMAND(ID_FLIP_VERTICAL, &CyuvplayerDlg::OnVerticalFlip)
 
 	ON_BN_CLICKED(IDC_REWIND, &CyuvplayerDlg::OnBnClickedRewind)
 	ON_BN_CLICKED(IDC_PLAY, &CyuvplayerDlg::OnBnClickedPlay)
@@ -299,8 +309,9 @@ void CyuvplayerDlg::Resize(int width, int height)
 	// reset alpha value to 255
 	memset( rgba, 255, sizeof(unsigned char)*t_width*t_height*4 );
 
-	// used for NV12, NV21, UYVY, RGB32, RGB24, RGB16
-	misc = new unsigned char[width*height*4];
+	// used for NV12, NV21, UYVY, RGB32, RGB24, RGB16, BGR32, BGR24, BGR16, RGB48, RGBA64
+	// Allocate max possible size: RGBA64 needs width*height*8
+	misc = new unsigned char[width*height*8];
 	
 	UpdateParameter();
 	OpenGLView->SetParam( t_width, t_height, ratio);
@@ -343,7 +354,14 @@ void CyuvplayerDlg::OnOpen()
 	CFileDialog	dlg(
 			TRUE, _T("YUV"), NULL,
 			OFN_HIDEREADONLY|OFN_OVERWRITEPROMPT|OFN_ALLOWMULTISELECT, 
-			_T("Image Files (YUV, RAW, IMG, ...)|*.YUV;*.RAW;*.IMG|")
+			_T("All Supported (*.yuv;*.raw;*.img;*.rgb;*.bgr;*.rgba;*.bgra;*.gray;*.yuv10;*.yuv12;*.yuv16;*.nv12;*.nv21)|*.yuv;*.raw;*.img;*.rgb;*.bgr;*.rgba;*.bgra;*.gray;*.yuv10;*.yuv12;*.yuv16;*.nv12;*.nv21|")
+			_T("YUV Files (*.yuv)|*.yuv|")
+			_T("Raw Image (*.raw;*.img)|*.raw;*.img|")
+			_T("RGB/BGR (*.rgb;*.bgr;*.rgba;*.bgra)|*.rgb;*.bgr;*.rgba;*.bgra|")
+			_T("Grayscale (*.gray)|*.gray|")
+			_T("High Bit-depth (*.yuv10;*.yuv12;*.yuv16)|*.yuv10;*.yuv12;*.yuv16|")
+			_T("Semi-planar (*.nv12;*.nv21)|*.nv12;*.nv21|")
+			_T("All Files (*.*)|*.*|")
 			);
 
 	if( IDOK != dlg.DoModal() )
@@ -534,6 +552,475 @@ void CyuvplayerDlg::OnSegment(UINT nID )
 
 }
 
+// ========== Color Range: Limited / Full ==========
+void CyuvplayerDlg::OnColorRange(UINT nID)
+{
+	switch (nID) {
+	case ID_RANGE_LIMITED:
+		menu->CheckMenuItem(ID_RANGE_LIMITED, MF_CHECKED);
+		menu->CheckMenuItem(ID_RANGE_FULL, MF_UNCHECKED);
+		m_colorRange = COLOR_RANGE_LIMITED;
+		break;
+	case ID_RANGE_FULL:
+		menu->CheckMenuItem(ID_RANGE_LIMITED, MF_UNCHECKED);
+		menu->CheckMenuItem(ID_RANGE_FULL, MF_CHECKED);
+		m_colorRange = COLOR_RANGE_FULL;
+		break;
+	}
+	InitYuv2rgbLUT();
+	LoadFrame();
+}
+
+// ========== Color Matrix: BT.601 / BT.709 / BT.2020 ==========
+void CyuvplayerDlg::OnColorMatrix(UINT nID)
+{
+	int i;
+	for (i = ID_MATRIX_START; i <= ID_MATRIX_END; i++)
+		menu->CheckMenuItem(i, MF_UNCHECKED);
+
+	switch (nID) {
+	case ID_MATRIX_BT601:
+		menu->CheckMenuItem(ID_MATRIX_BT601, MF_CHECKED);
+		m_colorMatrix = COLOR_MATRIX_BT601;
+		break;
+	case ID_MATRIX_BT709:
+		menu->CheckMenuItem(ID_MATRIX_BT709, MF_CHECKED);
+		m_colorMatrix = COLOR_MATRIX_BT709;
+		break;
+	case ID_MATRIX_BT2020:
+		menu->CheckMenuItem(ID_MATRIX_BT2020, MF_CHECKED);
+		m_colorMatrix = COLOR_MATRIX_BT2020;
+		break;
+	}
+	InitYuv2rgbLUT();
+	LoadFrame();
+}
+
+// ========== Vertical Flip Toggle ==========
+void CyuvplayerDlg::OnVerticalFlip()
+{
+	m_verticalFlip = !m_verticalFlip;
+	menu->CheckMenuItem(ID_FLIP_VERTICAL, m_verticalFlip ? MF_CHECKED : MF_UNCHECKED);
+	if (fd >= 0) {
+		yuv2rgb();
+		OpenGLView->LoadTexture(rgba);
+	}
+}
+
+// ========== Initialize yuv2rgb Lookup Tables ==========
+// Pre-compute multiplication tables for the selected color matrix and range.
+// This eliminates per-pixel subtractions and multiplications in the inner loop.
+void CyuvplayerDlg::InitYuv2rgbLUT(void)
+{
+	int i;
+	int cy, cr, cgv, cgu, cb; // fixed-point coefficients (shift 8)
+	int y_offset;
+
+	if (m_colorRange == COLOR_RANGE_FULL) {
+		y_offset = 0;
+		// Full range: 1.0 * 256 = 256
+		cy = 256;
+	}
+	else {
+		y_offset = 16;
+		// Limited range: 255/219 * 256 ≈ 298
+		cy = 298;
+	}
+	m_y_offset = y_offset;
+
+	// Select matrix coefficients (chroma always use 256/224 scaling for limited range)
+	switch (m_colorMatrix) {
+	case COLOR_MATRIX_BT709:
+		// BT.709: Kr=0.2126, Kg=0.7152, Kb=0.0722
+		if (m_colorRange == COLOR_RANGE_FULL) {
+			cr = 403;  cgv = -120; cgu = -48;  cb = 475;
+		} else {
+			cr = 461;  cgv = -137; cgu = -55;  cb = 543;
+		}
+		break;
+	case COLOR_MATRIX_BT2020:
+		// BT.2020: Kr=0.2627, Kg=0.6780, Kb=0.0593
+		if (m_colorRange == COLOR_RANGE_FULL) {
+			cr = 378;  cgv = -146; cgu = -42;  cb = 482;
+		} else {
+			cr = 431;  cgv = -167; cgu = -48;  cb = 551;
+		}
+		break;
+	default: // COLOR_MATRIX_BT601
+		// BT.601: Kr=0.299, Kg=0.587, Kb=0.114
+		if (m_colorRange == COLOR_RANGE_FULL) {
+			cr = 359;  cgv = -183; cgu = -88;  cb = 454;
+		} else {
+			cr = 409;  cgv = -208; cgu = -100; cb = 516;
+		}
+		break;
+	}
+
+	// Build LUTs: precompute coeff * (value - offset)
+	// Y LUT: cy * (Y - y_offset)  for Y = 0..255
+	for (i = 0; i < 256; i++) {
+		int yv = i - y_offset;
+		m_lut_cy[i] = cy * yv;
+	}
+
+	// Chroma LUTs: for U/V = 0..255, compute coeff * (value - 128)
+	for (i = 0; i < 256; i++) {
+		int uv = i - 128;
+		m_lut_cr[i]  = cr * uv;
+		m_lut_cb[i]  = cb * uv;
+		m_lut_cgv[i] = cgv * uv;
+		m_lut_cgu[i] = cgu * uv;
+	}
+}
+
+#define clip(var) ((var>=255)?255:(var<=0)?0:var)
+
+// Helper to read 16-bit LE/BE value
+static inline int read16le(const unsigned char* p) { return p[0] | (p[1] << 8); }
+static inline int read16be(const unsigned char* p) { return (p[0] << 8) | p[1]; }
+static inline int read16(const unsigned char* p, int bigEndian)
+{
+	return bigEndian ? read16be(p) : read16le(p);
+}
+
+// ========== yuv2rgb with LUT, range/matrix support, and vertical flip ==========
+void CyuvplayerDlg::yuv2rgb(void)
+{
+	int j, i;
+	int stride_uv;
+	int Y, U, V;
+
+	unsigned char* line;
+	unsigned char* cur;
+	unsigned short* rgb16;
+	const unsigned char* src;
+
+	int h = height;
+	int y_start, y_end, y_step;
+
+	// Vertical flip: if enabled, iterate rows in reverse
+	if (m_verticalFlip) {
+		y_start = h - 1;
+		y_end = -1;
+		y_step = -1;
+		line = rgba + (h - 1) * (t_width << 2);
+	} else {
+		y_start = 0;
+		y_end = h;
+		y_step = 1;
+		line = rgba;
+	}
+
+	// ========== Packed YUV444 (Y U V Y U V ...) ==========
+	if (m_color == PACKED_YUV444) {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				Y = misc[(j * width + i) * 3];
+				U = misc[(j * width + i) * 3 + 1];
+				V = misc[(j * width + i) * 3 + 2];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== Planar YUV444 ==========
+	else if (m_color == YUV444) {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				Y = y[j * width + i];
+				U = u[j * width + i];
+				V = v[j * width + i];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== Planar YUV422 ==========
+	else if (m_color == YUV422) {
+		stride_uv = (width + 1) >> 1;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				Y = y[j * width + i];
+				U = u[j * stride_uv + (i >> 1)];
+				V = v[j * stride_uv + (i >> 1)];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== Planar YUV420 + YV12 + NV12 + NV21 ==========
+	else if (m_color == YUV420 || m_color == YV12 || m_color == NV12 || m_color == NV21) {
+		stride_uv = (width + 1) >> 1;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				Y = y[j * width + i];
+				if (m_color == YUV420) {
+					U = u[(j >> 1) * stride_uv + (i >> 1)];
+					V = v[(j >> 1) * stride_uv + (i >> 1)];
+				}
+				else if (m_color == YV12) {
+					V = v[(j >> 1) * stride_uv + (i >> 1)];
+					U = u[(j >> 1) * stride_uv + (i >> 1)];
+				}
+				else if (m_color == NV12) {
+					U = misc[(j >> 1) * width + ((i >> 1) << 1)];
+					V = misc[(j >> 1) * width + ((i >> 1) << 1) + 1];
+				}
+				else { // NV21
+					V = misc[(j >> 1) * width + ((i >> 1) << 1)];
+					U = misc[(j >> 1) * width + ((i >> 1) << 1) + 1];
+				}
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== Packed YUV422: UYVY ==========
+	else if (m_color == UYVY) {
+		src = misc;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i += 2) {
+				U = src[0];  Y = src[1];  V = src[2];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+				Y = src[3];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+				src += 4;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== Packed YUV422: YUYV ==========
+	else if (m_color == YUYV) {
+		src = misc;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i += 2) {
+				Y = src[0];  U = src[1];  V = src[3];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+				Y = src[2];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+				src += 4;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== YUV420 10-bit LE/BE ==========
+	else if (m_color == YUV420_10LE || m_color == YUV420_10BE) {
+		int isBE = (m_color == YUV420_10BE);
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				Y = read16(&y[(j * width + i) * 2], isBE) >> 2; // 10-bit → 8-bit
+				U = read16(&u[(j >> 1) * width + ((i >> 1) << 1)], isBE) >> 2;
+				V = read16(&v[(j >> 1) * width + ((i >> 1) << 1)], isBE) >> 2;
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== YUV444 10-bit LE/BE ==========
+	else if (m_color == YUV444_10LE || m_color == YUV444_10BE) {
+		int isBE = (m_color == YUV444_10BE);
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				Y = read16(&y[(j * width + i) * 2], isBE) >> 2;
+				U = read16(&u[(j * width + i) * 2], isBE) >> 2;
+				V = read16(&v[(j * width + i) * 2], isBE) >> 2;
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== YUV420 12/16-bit LE/BE ==========
+	else if (m_color == YUV420_12LE || m_color == YUV420_12BE
+		  || m_color == YUV420_16LE || m_color == YUV420_16BE) {
+		int isBE = (m_color == YUV420_12BE || m_color == YUV420_16BE);
+		int shift = (m_color == YUV420_12LE || m_color == YUV420_12BE) ? 4 : 8;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				Y = read16(&y[(j * width + i) * 2], isBE) >> shift;
+				U = read16(&u[(j >> 1) * width + ((i >> 1) << 1)], isBE) >> shift;
+				V = read16(&v[(j >> 1) * width + ((i >> 1) << 1)], isBE) >> shift;
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== RGB24 (true RGB) ==========
+	else if (m_color == RGB24) {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				*cur++ = misc[(j * width + i) * 3 + 0];
+				*cur++ = misc[(j * width + i) * 3 + 1];
+				*cur++ = misc[(j * width + i) * 3 + 2];
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== RGB32 (true RGBA) ==========
+	else if (m_color == RGB32) {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				*cur++ = misc[(j * width + i) * 4 + 0];
+				*cur++ = misc[(j * width + i) * 4 + 1];
+				*cur++ = misc[(j * width + i) * 4 + 2];
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== RGB16 (RGB565) ==========
+	else if (m_color == RGB16) {
+		rgb16 = (unsigned short*)misc;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				unsigned short p = rgb16[j * width + i];
+				*cur++ = ((p >> 11) & 0x1F) << 3;
+				*cur++ = ((p >> 5) & 0x3F) << 2;
+				*cur++ = (p & 0x1F) << 3;
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== BGR24 ==========
+	else if (m_color == BGR24) {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				*cur++ = misc[(j * width + i) * 3 + 2];
+				*cur++ = misc[(j * width + i) * 3 + 1];
+				*cur++ = misc[(j * width + i) * 3 + 0];
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== BGR32 ==========
+	else if (m_color == BGR32) {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				*cur++ = misc[(j * width + i) * 4 + 2];
+				*cur++ = misc[(j * width + i) * 4 + 1];
+				*cur++ = misc[(j * width + i) * 4 + 0];
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== BGR16 ==========
+	else if (m_color == BGR16) {
+		rgb16 = (unsigned short*)misc;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				unsigned short p = rgb16[j * width + i];
+				*cur++ = (p & 0x1F) << 3;
+				*cur++ = ((p >> 5) & 0x3F) << 2;
+				*cur++ = ((p >> 11) & 0x1F) << 3;
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== RGB48 ==========
+	else if (m_color == RGB48) {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				int offset = (j * width + i) * 6;
+				*cur++ = misc[offset + 1];
+				*cur++ = misc[offset + 3];
+				*cur++ = misc[offset + 5];
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== RGBA64 ==========
+	else if (m_color == RGBA64) {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				int offset = (j * width + i) * 8;
+				*cur++ = misc[offset + 1];
+				*cur++ = misc[offset + 3];
+				*cur++ = misc[offset + 5];
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== GRAY16 ==========
+	else if (m_color == GRAY16) {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				unsigned char g8 = y[(j * width + i) * 2 + 1];
+				*cur++ = g8; *cur++ = g8; *cur++ = g8; cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== YYY (8-bit grayscale) ==========
+	else {
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				unsigned char g8 = y[j * width + i];
+				*cur++ = g8; *cur++ = g8; *cur++ = g8; cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+}
+
+// ========== Old OnColor (unchanged) ==========
 void CyuvplayerDlg::OnColor(UINT nID )
 {
 
@@ -545,17 +1032,7 @@ void CyuvplayerDlg::OnColor(UINT nID )
 			menu->CheckMenuItem(i,	MF_UNCHECKED);
 
 	switch( nID ){
-		// planar formats
-		case ID_COLOR_YUV420_10LE:
-			menu->CheckMenuItem( ID_COLOR_YUV420_10LE, MF_CHECKED);
-			m_color = YUV420_10LE;
-			break;
-        
-		case ID_COLOR_YUV420_10BE:
-			menu->CheckMenuItem( ID_COLOR_YUV420_10BE, MF_CHECKED);
-			m_color = YUV420_10BE;
-			break;
-        
+		// Planar YUV formats
 		case ID_COLOR_YUV444:
 			menu->CheckMenuItem( ID_COLOR_YUV444, MF_CHECKED);
 			m_color = YUV444;
@@ -571,51 +1048,132 @@ void CyuvplayerDlg::OnColor(UINT nID )
 			m_color = YUV420;
 			break;
 
-		// packed array
-        case ID_COLOR_PACKEDYUV444:
-            menu->CheckMenuItem( ID_COLOR_PACKEDYUV444,   MF_CHECKED);
-            m_color = PACKED_YUV444;
-            break;
-
-		case ID_COLOR_NV21:
-			menu->CheckMenuItem( ID_COLOR_NV21,   MF_CHECKED);
-			m_color = NV21;
+		case ID_COLOR_YV12:
+			menu->CheckMenuItem( ID_COLOR_YV12, MF_CHECKED);
+			m_color = YV12;
 			break;
 
-		case ID_COLOR_NV12:
-			menu->CheckMenuItem( ID_COLOR_NV12,   MF_CHECKED);
-			m_color = NV12;
+		// Packed YUV formats
+		case ID_COLOR_PACKEDYUV444:
+			menu->CheckMenuItem( ID_COLOR_PACKEDYUV444, MF_CHECKED);
+			m_color = PACKED_YUV444;
 			break;
 
 		case ID_COLOR_UYVY:
-			menu->CheckMenuItem( ID_COLOR_UYVY,   MF_CHECKED);
+			menu->CheckMenuItem( ID_COLOR_UYVY, MF_CHECKED);
 			m_color = UYVY;
 			break;
 
 		case ID_COLOR_YUYV:
-			menu->CheckMenuItem( ID_COLOR_YUYV,   MF_CHECKED);
+			menu->CheckMenuItem( ID_COLOR_YUYV, MF_CHECKED);
 			m_color = YUYV;
 			break;
 
-		// RGB
-		case ID_COLOR_RGB32:
-			menu->CheckMenuItem( ID_COLOR_RGB32,   MF_CHECKED);
-			m_color = RGB32;
+		case ID_COLOR_NV12:
+			menu->CheckMenuItem( ID_COLOR_NV12, MF_CHECKED);
+			m_color = NV12;
 			break;
-			
+
+		case ID_COLOR_NV21:
+			menu->CheckMenuItem( ID_COLOR_NV21, MF_CHECKED);
+			m_color = NV21;
+			break;
+
+		// 10-bit YUV formats
+		case ID_COLOR_YUV420_10LE:
+			menu->CheckMenuItem( ID_COLOR_YUV420_10LE, MF_CHECKED);
+			m_color = YUV420_10LE;
+			break;
+
+		case ID_COLOR_YUV420_10BE:
+			menu->CheckMenuItem( ID_COLOR_YUV420_10BE, MF_CHECKED);
+			m_color = YUV420_10BE;
+			break;
+
+		case ID_COLOR_YUV444_10LE:
+			menu->CheckMenuItem( ID_COLOR_YUV444_10LE, MF_CHECKED);
+			m_color = YUV444_10LE;
+			break;
+
+		case ID_COLOR_YUV444_10BE:
+			menu->CheckMenuItem( ID_COLOR_YUV444_10BE, MF_CHECKED);
+			m_color = YUV444_10BE;
+			break;
+
+		// 12-bit YUV formats
+		case ID_COLOR_YUV420_12LE:
+			menu->CheckMenuItem( ID_COLOR_YUV420_12LE, MF_CHECKED);
+			m_color = YUV420_12LE;
+			break;
+
+		case ID_COLOR_YUV420_12BE:
+			menu->CheckMenuItem( ID_COLOR_YUV420_12BE, MF_CHECKED);
+			m_color = YUV420_12BE;
+			break;
+
+		// 16-bit YUV formats
+		case ID_COLOR_YUV420_16LE:
+			menu->CheckMenuItem( ID_COLOR_YUV420_16LE, MF_CHECKED);
+			m_color = YUV420_16LE;
+			break;
+
+		case ID_COLOR_YUV420_16BE:
+			menu->CheckMenuItem( ID_COLOR_YUV420_16BE, MF_CHECKED);
+			m_color = YUV420_16BE;
+			break;
+
+		// RGB formats (true RGB order: R at byte 0)
 		case ID_COLOR_RGB24:
-			menu->CheckMenuItem( ID_COLOR_RGB24,   MF_CHECKED);
+			menu->CheckMenuItem( ID_COLOR_RGB24, MF_CHECKED);
 			m_color = RGB24;
 			break;
-			
+
+		case ID_COLOR_RGB32:
+			menu->CheckMenuItem( ID_COLOR_RGB32, MF_CHECKED);
+			m_color = RGB32;
+			break;
+
 		case ID_COLOR_RGB16:
-			menu->CheckMenuItem( ID_COLOR_RGB16,   MF_CHECKED);
+			menu->CheckMenuItem( ID_COLOR_RGB16, MF_CHECKED);
 			m_color = RGB16;
 			break;
 
-		// grey
+		// BGR formats (B at byte 0, same as old "RGB" behavior)
+		case ID_COLOR_BGR24:
+			menu->CheckMenuItem( ID_COLOR_BGR24, MF_CHECKED);
+			m_color = BGR24;
+			break;
+
+		case ID_COLOR_BGR32:
+			menu->CheckMenuItem( ID_COLOR_BGR32, MF_CHECKED);
+			m_color = BGR32;
+			break;
+
+		case ID_COLOR_BGR16:
+			menu->CheckMenuItem( ID_COLOR_BGR16, MF_CHECKED);
+			m_color = BGR16;
+			break;
+
+		// High bit-depth RGB
+		case ID_COLOR_RGB48:
+			menu->CheckMenuItem( ID_COLOR_RGB48, MF_CHECKED);
+			m_color = RGB48;
+			break;
+
+		case ID_COLOR_RGBA64:
+			menu->CheckMenuItem( ID_COLOR_RGBA64, MF_CHECKED);
+			m_color = RGBA64;
+			break;
+
+		// Grayscale
+		case ID_COLOR_GRAY16:
+			menu->CheckMenuItem( ID_COLOR_GRAY16, MF_CHECKED);
+			m_color = GRAY16;
+			break;
+
+		// grey (default)
 		default:
-			menu->CheckMenuItem( ID_COLOR_Y     , MF_CHECKED);
+			menu->CheckMenuItem( ID_COLOR_Y, MF_CHECKED);
 			m_color = YYY;
 			
 	}
@@ -637,27 +1195,42 @@ void CyuvplayerDlg::UpdateParameter()
 	size = _telli64(fd);
 
 	frame_size_y = width*height;
-	if (m_color == YUV444 || m_color == PACKED_YUV444)
+
+	// UV stride and size based on chroma subsampling
+	if (m_color == YUV444 || m_color == PACKED_YUV444 || m_color == YUV444_10LE || m_color == YUV444_10BE)
 		frame_size_uv = width*height;
 	else if (m_color == YUV422 || m_color == UYVY || m_color == YUYV)
 		frame_size_uv = ((width+1)>>1)*height;
-	else if (m_color == YUV420 || m_color == NV12 || m_color == NV21 || m_color == YUV420_10LE || m_color == YUV420_10BE)
+	else if (m_color == YUV420 || m_color == YV12 || m_color == NV12 || m_color == NV21 
+			|| m_color == YUV420_10LE || m_color == YUV420_10BE
+			|| m_color == YUV420_12LE || m_color == YUV420_12BE
+			|| m_color == YUV420_16LE || m_color == YUV420_16BE)
 		frame_size_uv = ((width+1)>>1) * ((height+1)>>1);
 	else 
 		frame_size_uv = 0;
-    
-    if ( m_color == YUV420_10LE || m_color == YUV420_10BE)
-    {
-        frame_size_y  *= 2;
-        frame_size_uv *= 2; 
-    }
 
-	if (m_color == RGB32)
+	// Adjust for bit depth (10/12/16-bit formats use 2 bytes per sample)
+	if (m_color == YUV420_10LE || m_color == YUV420_10BE
+		|| m_color == YUV444_10LE || m_color == YUV444_10BE
+		|| m_color == YUV420_12LE || m_color == YUV420_12BE
+		|| m_color == YUV420_16LE || m_color == YUV420_16BE
+		|| m_color == GRAY16)
+	{
+		frame_size_y  *= 2;
+		frame_size_uv *= 2;
+	}
+
+	// Frame size in bytes
+	if (m_color == RGB32 || m_color == BGR32)
 		frame_size = frame_size_y*4;
-	else if (m_color == RGB24)
+	else if (m_color == RGB24 || m_color == BGR24)
 		frame_size = frame_size_y*3;
-	else if (m_color == RGB16)
+	else if (m_color == RGB16 || m_color == BGR16)
 		frame_size = frame_size_y*2;
+	else if (m_color == RGB48)
+		frame_size = frame_size_y*6;   // 3 channels * 2 bytes
+	else if (m_color == RGBA64)
+		frame_size = frame_size_y*8;   // 4 channels * 2 bytes
 	else 
 		frame_size = frame_size_y + 2*frame_size_uv;
 
@@ -681,35 +1254,50 @@ void CyuvplayerDlg::LoadFrame(void)
 
 	_lseeki64( fd, (__int64)cur*(__int64)frame_size, SEEK_SET );
 
-	if( m_color == RGB32 )
+	// RGB / BGR / high-bitdepth: read into misc buffer
+	if( m_color == RGB32 || m_color == BGR32 )
 		_read( fd, misc, frame_size_y*4 );
-
-	else if( m_color == RGB24 )
+	else if( m_color == RGB24 || m_color == BGR24 )
 		_read( fd, misc, frame_size_y*3 );
-	
-	else if( m_color == RGB16 )
+	else if( m_color == RGB16 || m_color == BGR16 )
 		_read( fd, misc, frame_size_y*2 );
+	else if( m_color == RGB48 )
+		_read( fd, misc, frame_size_y*6 );
+	else if( m_color == RGBA64 )
+		_read( fd, misc, frame_size_y*8 );
 
+	// Packed YUV: read into misc
+	else if( m_color == PACKED_YUV444 )
+		_read( fd, misc, frame_size );
 	else if( m_color == UYVY )
 		_read( fd, misc, frame_size_y*2 );
-
 	else if( m_color == YUYV )
 		_read( fd, misc, frame_size_y*2 );
 
+	// Semi-planar: Y into y, UV into misc
 	else if( m_color == NV12 || m_color == NV21)
 	{
 		_read( fd, y,    frame_size_y );
 		_read( fd, misc, frame_size_y/2 );
 	}
 
-    else if ( m_color == PACKED_YUV444 )
-        _read( fd, misc, frame_size );
+	// Planar YUV / Grayscale: Y into y, U/V or nothing
+	else if (m_color == YV12)
+	{
+		// YV12: Y plane, then V plane, then U plane
+		_read( fd, y, frame_size_y );
+		_read( fd, v, frame_size_uv );
+		_read( fd, u, frame_size_uv );
+	}
 
 	else
 	{
+		// Planar: Y, then U, then V (or just Y for grayscale)
 		_read( fd, y, frame_size_y );
-		_read( fd, u, frame_size_uv );
-		_read( fd, v, frame_size_uv );
+		if (m_color != YYY && m_color != GRAY16) {
+			_read( fd, u, frame_size_uv );
+			_read( fd, v, frame_size_uv );
+		}
 	}
 
 	yuv2rgb();
@@ -719,222 +1307,7 @@ void CyuvplayerDlg::LoadFrame(void)
 	m_slider.UpdateData(FALSE);
 }
 
-#define clip(var) ((var>=255)?255:(var<=0)?0:var)
-void CyuvplayerDlg::yuv2rgb(void)
-{
 
-	int j, i;
-	int c, d, e;
-
-	int stride_uv;
-
-	int r, g, b;
-	
-	unsigned char* line = rgba;
-	unsigned char* cur;
-
-	short* rgb16;
-
-    if( m_color == PACKED_YUV444) {
-        for( j = 0 ; j < height ; j++ ){
-            cur = line;
-            for( i = 0 ; i < width ; i++ ){
-                c = misc[(j*width+i)*3    ] - 16;
-                d = misc[(j*width+i)*3 + 1] - 128;
-                e = misc[(j*width+i)*3 + 2] - 128;
-
-                (*cur) = clip(( 298 * c           + 409 * e + 128) >> 8);cur++;
-                (*cur) = clip(( 298 * c - 100 * d - 208 * e + 128) >> 8);cur++;
-                (*cur) = clip(( 298 * c + 516 * d           + 128) >> 8);cur+=2;
-            }
-            line += t_width<<2;
-        }
-    }
-	else if( m_color == YUV444 ){
-		for( j = 0 ; j < height ; j++ ){
-			cur = line;
-			for( i = 0 ; i < width ; i++ ){
-				c = y[j*width+i] - 16;
-				d = u[j*width+i] - 128;
-				e = v[j*width+i] - 128;
-
-				(*cur) = clip(( 298 * c           + 409 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c - 100 * d - 208 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c + 516 * d           + 128) >> 8);cur+=2;
-			}
-			line += t_width<<2;
-		}
-	}
-	else if( m_color == YUV422 ){
-		stride_uv = (width+1)>>1;
-
-		for( j = 0 ; j < height ; j++ ){
-			cur = line;
-			for( i = 0 ; i < width ; i++ ){
-				c = y[j*width+i] - 16;
-				d = u[j*stride_uv+(i>>1)] - 128;
-				e = v[j*stride_uv+(i>>1)] - 128;
-
-				(*cur) = clip(( 298 * c           + 409 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c - 100 * d - 208 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c + 516 * d           + 128) >> 8);cur+=2;
-			}
-			line += t_width<<2;
-		}
-	}
-
-	else if( m_color == UYVY ){
-		unsigned char* t = misc;
-		for( j = 0 ; j < height ; j++ ){
-			cur = line;
-			for( i = 0 ; i < width ; i+=2 ){
-				c = *(t+1) - 16;    // Y1
-				d = *(t+0) - 128;   // U
-				e = *(t+2) - 128;   // V
-
-				(*cur) = clip(( 298 * c           + 409 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c - 100 * d - 208 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c + 516 * d           + 128) >> 8);cur+=2;
-
-				c = *(t+3) - 16;    // Y2
-				(*cur) = clip(( 298 * c           + 409 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c - 100 * d - 208 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c + 516 * d           + 128) >> 8);cur+=2;
-
-				t += 4;
-			}
-			line += t_width<<2;
-		}
-	}
-
-	else if( m_color == YUYV ){
-		unsigned char* t = misc;
-		for( j = 0 ; j < height ; j++ ){
-			cur = line;
-			for( i = 0 ; i < width ; i+=2 ){
-				c = *(t+0) - 16;    // Y1
-				d = *(t+1) - 128;   // U
-				e = *(t+3) - 128;   // V
-
-				(*cur) = clip(( 298 * c           + 409 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c - 100 * d - 208 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c + 516 * d           + 128) >> 8);cur+=2;
-
-				c = *(t+2) - 16;    // Y2
-				(*cur) = clip(( 298 * c           + 409 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c - 100 * d - 208 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c + 516 * d           + 128) >> 8);cur+=2;
-
-				t += 4;
-			}
-			line += t_width<<2;
-		}
-	}
-
-	else if( m_color == YUV420 || m_color == NV12 || m_color == NV21 ){
-		stride_uv = (width+1)>>1;
-
-		for( j = 0 ; j < height ; j++ ){
-			cur = line;
-			for( i = 0 ; i < width ; i++ ){
-				c = y[j*width+i] - 16;
-
-				if (m_color == YUV420)
-				{
-					d = u[(j>>1)*stride_uv+(i>>1)] - 128;
-					e = v[(j>>1)*stride_uv+(i>>1)] - 128;
-				}
-				else if (m_color == NV12)
-				{
-					d = misc[(j>>1)*width+(i>>1<<1)  ] - 128;
-					e = misc[(j>>1)*width+(i>>1<<1)+1] - 128;
-				}
-				else // if (m_color == NV21)
-				{
-					d = misc[(j>>1)*width+(i>>1<<1)+1] - 128;
-					e = misc[(j>>1)*width+(i>>1<<1)  ] - 128;
-				}
-
-				(*cur) = clip(( 298 * c           + 409 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c - 100 * d - 208 * e + 128) >> 8);cur++;
-				(*cur) = clip(( 298 * c + 516 * d           + 128) >> 8);cur+=2;
-			}
-			line += t_width<<2;
-		}
-	}
-    
-	else if( m_color == YUV420_10LE || m_color == YUV420_10BE ){
-		for( j = 0 ; j < height ; j++ ){
-			cur = line;
-			for( i = 0 ; i < width ; i++ ){
-
-                if (m_color == YUV420_10BE)
-                {
-                    c = (y[j*width*2 +  i*2] << 8) | y[j*width*2 +  i*2 + 1];
-                    d = (u[(j>>1)*width+(i>>1<<1)  ] << 8) | u[(j>>1)*width+(i>>1<<1)+1];
-                    e = (v[(j>>1)*width+(i>>1<<1)  ] << 8) | v[(j>>1)*width+(i>>1<<1)+1];
-                }
-                else
-                {
-                    c = (y[j*width*2 +  i*2 + 1] << 8)  | y[j*width*2 +  i*2];
-                    d = (u[(j>>1)*width+(i>>1<<1)+1] << 8)  | u[(j>>1)*width+(i>>1<<1)  ];
-                    e = (v[(j>>1)*width+(i>>1<<1)+1] << 8)  | v[(j>>1)*width+(i>>1<<1)  ];
-                }
-
-				c = c - (16<<2);
-				d = d - (128<<2);
-				e = e - (128<<2);
-
-				(*cur) = clip(( 298 * c           + 409 * e + (128<<2)) >> 10);cur++;
-				(*cur) = clip(( 298 * c - 100 * d - 208 * e + (128<<2)) >> 10);cur++;
-				(*cur) = clip(( 298 * c + 516 * d           + (128<<2)) >> 10);cur+=2;
-			}
-			line += t_width<<2;
-		}
-	}
-
-	else if (m_color == RGB32 || m_color == RGB24 || m_color == RGB16) {
-		for( j = 0 ; j < height ; j++ ){
-			cur = line;
-			for( i = 0 ; i < width ; i++ ){
-				if (m_color == RGB32) {
-					r = misc[(j*width+i)*4+2];
-					g = misc[(j*width+i)*4+1];
-					b = misc[(j*width+i)*4+0];
-				}
-				else if (m_color == RGB24) {
-					r = misc[(j*width+i)*3+2];
-					g = misc[(j*width+i)*3+1];
-					b = misc[(j*width+i)*3+0];
-				}
-				else {
-					rgb16 = (short*)misc;
-
-					r = ((rgb16[j*width+i] >> 11)&0x1F) << 3;
-					g = ((rgb16[j*width+i] >> 5 )&0x3F) << 2;
-					b = ((rgb16[j*width+i]      )&0x1F) << 3;
-				}
-
-				(*cur) = r; cur++;
-				(*cur) = g; cur++;
-				(*cur) = b; cur+=2;
-			}
-			line += t_width<<2;
-		}	
-	}
-
-	else { // YYY
-		for( j = 0 ; j < height ; j++ ){
-			cur = line;
-			for( i = 0 ; i < width ; i++ ){
-				(*cur) = y[j*width+i]; cur++;
-				(*cur) = y[j*width+i]; cur++;
-				(*cur) = y[j*width+i]; cur+=2;
-			}
-			line += t_width<<2;
-		}	
-	}
-}
 
 void CyuvplayerDlg::fforward(void)
 {

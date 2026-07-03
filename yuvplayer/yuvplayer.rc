@@ -13,7 +13,7 @@
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// ÇÑ±¹¾î(´ëÇÑ¹Î±¹) resources
+// ï¿½Ñ±ï¿½ï¿½ï¿½(ï¿½ï¿½ï¿½Ñ¹Î±ï¿½) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_KOR)
 LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
@@ -104,8 +104,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,5,0,0
- PRODUCTVERSION 2,5,0,0
+ FILEVERSION 2,6,0,0
+ PRODUCTVERSION 2,6,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -121,12 +121,12 @@ BEGIN
         BLOCK "080004e4"
         BEGIN
             VALUE "FileDescription", "YUV file viewer"
-            VALUE "FileVersion", "2.5.0.0"
+            VALUE "FileVersion", "2.6.0.0"
             VALUE "InternalName", "yuvplayer.exe"
             VALUE "LegalCopyright", "Copyright Tae-young (c).  All rights reserved."
             VALUE "OriginalFilename", "yuvplayer.exe"
             VALUE "ProductName", "YUVplayer"
-            VALUE "ProductVersion", "2.5.0.0"
+            VALUE "ProductVersion", "2.6.0.0"
         END
     END
     BLOCK "VarFileInfo"
@@ -200,23 +200,51 @@ BEGIN
     END
     POPUP "&Color"
     BEGIN
-        MENUITEM "YUV420 10bitLE",              ID_COLOR_YUV420_10LE
-        MENUITEM "YUV420 10bitBE",              ID_COLOR_YUV420_10BE
+        POPUP "YUV Planar"
+        BEGIN
+            MENUITEM "YUV444 8-bit",            ID_COLOR_YUV444
+            MENUITEM "YUV422 8-bit",            ID_COLOR_YUV422
+            MENUITEM "YUV420 8-bit",            ID_COLOR_YUV420, CHECKED
+            MENUITEM "YV12 8-bit",              ID_COLOR_YV12
+            MENUITEM SEPARATOR
+            MENUITEM "YUV420 10bit LE",         ID_COLOR_YUV420_10LE
+            MENUITEM "YUV420 10bit BE",         ID_COLOR_YUV420_10BE
+            MENUITEM "YUV444 10bit LE",         ID_COLOR_YUV444_10LE
+            MENUITEM "YUV444 10bit BE",         ID_COLOR_YUV444_10BE
+            MENUITEM SEPARATOR
+            MENUITEM "YUV420 12bit LE",         ID_COLOR_YUV420_12LE
+            MENUITEM "YUV420 12bit BE",         ID_COLOR_YUV420_12BE
+            MENUITEM SEPARATOR
+            MENUITEM "YUV420 16bit LE",         ID_COLOR_YUV420_16LE
+            MENUITEM "YUV420 16bit BE",         ID_COLOR_YUV420_16BE
+        END
+        POPUP "YUV Packed"
+        BEGIN
+            MENUITEM "YUV444 (Packed)",         ID_COLOR_PACKEDYUV444
+            MENUITEM "UYVY",                    ID_COLOR_UYVY
+            MENUITEM "YUYV",                    ID_COLOR_YUYV
+            MENUITEM "NV12",                    ID_COLOR_NV12
+            MENUITEM "NV21",                    ID_COLOR_NV21
+        END
         MENUITEM SEPARATOR
-        MENUITEM "YUV&444",                     ID_COLOR_YUV444
-        MENUITEM "YUV4&22",                     ID_COLOR_YUV422
-        MENUITEM "YUV42&0",                     ID_COLOR_YUV420, CHECKED
-        MENUITEM "&Y",                          ID_COLOR_Y
-        MENUITEM SEPARATOR
-        MENUITEM "YUV",                         ID_COLOR_PACKEDYUV444
-        MENUITEM "&UYVY",                       ID_COLOR_UYVY
-        MENUITEM "YUY&V",                       ID_COLOR_YUYV
-        MENUITEM "NV12",                        ID_COLOR_NV12
-        MENUITEM "NV21",                        ID_COLOR_NV21
-        MENUITEM SEPARATOR
-        MENUITEM "RGB32(RGBA8888)",             ID_COLOR_RGB32
-        MENUITEM "RGB24(RGB888)",               ID_COLOR_RGB24
-        MENUITEM "RGB16(RGB565)",               ID_COLOR_RGB16
+        POPUP "RGB / BGR"
+        BEGIN
+            MENUITEM "RGB24 (RGB888)",          ID_COLOR_RGB24
+            MENUITEM "RGB32 (RGBA8888)",        ID_COLOR_RGB32
+            MENUITEM "RGB16 (RGB565)",          ID_COLOR_RGB16
+            MENUITEM SEPARATOR
+            MENUITEM "BGR24 (BGR888)",          ID_COLOR_BGR24
+            MENUITEM "BGR32 (BGRA8888)",        ID_COLOR_BGR32
+            MENUITEM "BGR16 (BGR565)",          ID_COLOR_BGR16
+            MENUITEM SEPARATOR
+            MENUITEM "RGB48 (16-bit/ch)",       ID_COLOR_RGB48
+            MENUITEM "RGBA64 (16-bit/ch)",      ID_COLOR_RGBA64
+        END
+        POPUP "Grayscale"
+        BEGIN
+            MENUITEM "Y (8-bit)",               ID_COLOR_Y
+            MENUITEM "Gray16 (16-bit)",         ID_COLOR_GRAY16
+        END
     END
     POPUP "&Zoom"
     BEGIN
@@ -232,6 +260,21 @@ BEGIN
         MENUITEM "64x64 (RED)",                 ID_SEGMENT_64X64
         MENUITEM "32x32 (GREEN)",               ID_SEGMENT_32X32
         MENUITEM "16x16 (BLUE)",                ID_SEGMENT_16X16
+    END
+    POPUP "&Range"
+    BEGIN
+        MENUITEM "&Limited (16-235)",           ID_RANGE_LIMITED, CHECKED
+        MENUITEM "&Full (0-255)",               ID_RANGE_FULL
+    END
+    POPUP "&Matrix"
+    BEGIN
+        MENUITEM "BT.&601 (SD)",                ID_MATRIX_BT601, CHECKED
+        MENUITEM "BT.&709 (HD)",                ID_MATRIX_BT709
+        MENUITEM "BT.&2020 (UHD)",              ID_MATRIX_BT2020
+    END
+    POPUP "&View"
+    BEGIN
+        MENUITEM "&Vertical Flip",              ID_FLIP_VERTICAL
     END
 END
 
@@ -288,7 +331,7 @@ END
 // remains consistent on all systems.
 IDR_MAINFRAME           ICON                    "res\\wi0111-48.ico"
 
-#endif    // ÇÑ±¹¾î(´ëÇÑ¹Î±¹) resources
+#endif    // ï¿½Ñ±ï¿½ï¿½ï¿½(ï¿½ï¿½ï¿½Ñ¹Î±ï¿½) resources
 /////////////////////////////////////////////////////////////////////////////
 
 

@@ -50,6 +50,12 @@ COpenGLView::COpenGLView()
 	t_height = 0;
 
 	ratio = 1.0;
+
+	im = NULL;
+
+	// Mouse tracking
+	m_trackingMouse = FALSE;
+	m_savedTitle[0] = L'\0';
 }
 
 COpenGLView::~COpenGLView()
@@ -61,6 +67,8 @@ BEGIN_MESSAGE_MAP(COpenGLView, CView)
 	ON_WM_SIZE()
 	ON_WM_DESTROY()
 	ON_WM_ERASEBKGND()
+	ON_WM_MOUSEMOVE()
+	ON_WM_SETCURSOR()
 END_MESSAGE_MAP()
 
 
@@ -97,7 +105,6 @@ void COpenGLView::OnDraw(CDC* pDC)
 	}
 
 	SwapBuffers( dc );
-
 	::ReleaseDC( m_hWnd, dc );
 
 }
@@ -227,6 +234,8 @@ void COpenGLView::SetParam(int width, int height, float ratio)
 
 void COpenGLView::LoadTexture(unsigned char* rgba)
 {
+	// Store pointer for mouse-over pixel reading
+	im = rgba;
 
 	glBindTexture(GL_TEXTURE_2D, texture[0] );
 	if( loaded[0] )
@@ -257,4 +266,64 @@ BOOL COpenGLView::OnEraseBkgnd(CDC* pDC)
 
 	return TRUE;
 	//return CView::OnEraseBkgnd(pDC);
+}
+
+void COpenGLView::OnMouseMove(UINT nFlags, CPoint point)
+{
+	if (!m_trackingMouse) {
+		// Request WM_MOUSELEAVE notification
+		TRACKMOUSEEVENT tme = { sizeof(TRACKMOUSEEVENT), TME_LEAVE, m_hWnd, 0 };
+		::TrackMouseEvent(&tme);
+		m_trackingMouse = TRUE;
+
+		// Save original dialog title once
+		CWnd* parent = GetParent();
+		if (parent) parent->GetWindowText(m_savedTitle, 1024);
+	}
+
+	// Convert mouse coordinates to image coordinates
+	// OpenGL scales texture by ratio: tex_coord = window_coord / ratio
+	if (ratio > 0.f && t_width > 0 && t_height > 0 && im != NULL) {
+		int imgX = (int)(point.x / ratio);
+		int imgY = (int)(point.y / ratio);
+
+		// Clamp to valid texture range
+		if (imgX < 0) imgX = 0;
+		if (imgY < 0) imgY = 0;
+		if (imgX >= t_width) imgX = t_width - 1;
+		if (imgY >= t_height) imgY = t_height - 1;
+
+		int idx = (imgY * t_width + imgX) * 4;
+		if (idx + 2 < t_width * t_height * 4) {
+			wchar_t buf[256];
+			// Compact format: "filename (x,y) [R,G,B]"
+			wsprintf(buf, L"%s (%d,%d) [%d,%d,%d]",
+				m_savedTitle, imgX, imgY, im[idx], im[idx + 1], im[idx + 2]);
+			CWnd* parent = GetParent();
+			if (parent) parent->SetWindowText(buf);
+		}
+	}
+
+	CView::OnMouseMove(nFlags, point);
+}
+
+BOOL COpenGLView::OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message)
+{
+	// Crosshair cursor for pixel selection
+	::SetCursor(::LoadCursor(NULL, IDC_CROSS));
+	return TRUE;
+}
+
+// Restore original title when mouse leaves the view
+// (We handle this via a custom message since MFC doesn't have ON_WM_MOUSELEAVE macro)
+LRESULT COpenGLView::WindowProc(UINT message, WPARAM wParam, LPARAM lParam)
+{
+	if (message == WM_MOUSELEAVE) {
+		m_trackingMouse = FALSE;
+		if (m_savedTitle[0] != L'\0') {
+			CWnd* parent = GetParent();
+			if (parent) parent->SetWindowText(m_savedTitle);
+		}
+	}
+	return CView::WindowProc(message, wParam, lParam);
 }

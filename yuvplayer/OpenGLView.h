@@ -69,12 +69,19 @@ protected:
 	DECLARE_MESSAGE_MAP()
 	HGLRC m_hRC;
 
+	// Mouse tracking for pixel info (shown in parent title bar)
+	BOOL m_trackingMouse;
+	wchar_t m_savedTitle[1024];
+
 public:
 	afx_msg BOOL PreCreateWindow(CREATESTRUCT& cs);
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	afx_msg void OnSize(UINT nType, int cx, int cy);
 	afx_msg void OnDestroy();
 	afx_msg BOOL OnEraseBkgnd(CDC* pDC);
+	afx_msg void OnMouseMove(UINT nFlags, CPoint point);
+	afx_msg BOOL OnSetCursor(CWnd* pWnd, UINT nHitTest, UINT message);
+	virtual LRESULT WindowProc(UINT message, WPARAM wParam, LPARAM lParam);
 	void SetParam(int width, int height, float ratio);
 	void ChangeRatio(float ratio);
 	void LoadTexture(unsigned char* rgba);

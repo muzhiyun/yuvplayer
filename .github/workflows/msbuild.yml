@@ -1,7 +1,5 @@
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
+# MSBuild CI workflow for yuvplayer
+# Builds the MFC-based yuvplayer on Windows with MSVC.
 
 name: MSBuild
 
@@ -12,12 +10,7 @@ on:
     branches: [ "master" ]
 
 env:
-  # Path to the solution file relative to the root of the project.
   SOLUTION_FILE_PATH: .
-
-  # Configuration type to build.
-  # You can convert this to a build matrix if you need coverage of multiple configuration types.
-  # https://docs.github.com/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
   BUILD_CONFIGURATION: Release
 
 permissions:
@@ -25,20 +18,18 @@ permissions:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: windows-2022
 
     steps:
     - uses: actions/checkout@v4
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v1.0.2
-
-    - name: Restore NuGet packages
-      working-directory: ${{env.GITHUB_WORKSPACE}}
-      run: nuget restore ${{env.SOLUTION_FILE_PATH}}
-
-    - name: Build
-      working-directory: ${{env.GITHUB_WORKSPACE}}
-      # Add additional options to the MSBuild command line here (like platform or verbosity level).
-      # See https://docs.microsoft.com/visualstudio/msbuild/msbuild-command-line-reference
-      run: msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} ${{env.SOLUTION_FILE_PATH}}
+    - name: Install MFC component and Build
+      shell: cmd
+      run: |
+        :: Find VS installation path
+        for /f "tokens=*" %%i in ('"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath') do set VS_PATH=%%i
+        echo Visual Studio path: %VS_PATH%
+        :: Install MFC component if missing (required for this project)
+        "%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vs_installer.exe" modify --installPath "%VS_PATH%" --add Microsoft.VisualStudio.Component.VC.ATLMFC --quiet --norestart
+        :: Build using MSBuild from the VS installation
+        "%VS_PATH%\MSBuild\Current\Bin\MSBuild.exe" /m /p:Configuration=%BUILD_CONFIGURATION% %SOLUTION_FILE_PATH%

@@ -55,7 +55,20 @@
 #define ID_COLOR_RGB32                  40011
 #define ID_COLOR_RGB24                  40012
 #define ID_COLOR_RGB16                  40013
-#define ID_COLOR_END                    40013
+#define ID_COLOR_BGR32                  40014
+#define ID_COLOR_BGR24                  40015
+#define ID_COLOR_BGR16                  40016
+#define ID_COLOR_GRAY16                 40017
+#define ID_COLOR_YV12                   40018
+#define ID_COLOR_YUV444_10LE            40019
+#define ID_COLOR_YUV444_10BE            40020
+#define ID_COLOR_YUV420_12LE            40021
+#define ID_COLOR_YUV420_12BE            40022
+#define ID_COLOR_YUV420_16LE            40023
+#define ID_COLOR_YUV420_16BE            40024
+#define ID_COLOR_RGB48                  40025
+#define ID_COLOR_RGBA64                 40026
+#define ID_COLOR_END                    40026
 
 #define ID_SIZE_START                   40020
 #define ID_SIZE_8K						40020
@@ -86,6 +99,19 @@
 #define ID_SEGMENT_32X32                40061
 #define ID_SEGMENT_16X16                40062
 #define ID_SEGMENT_END                  40062
+
+#define ID_RANGE_START                  40100
+#define ID_RANGE_LIMITED               40100
+#define ID_RANGE_FULL                  40101
+#define ID_RANGE_END                   40101
+
+#define ID_MATRIX_START                40110
+#define ID_MATRIX_BT601                40110
+#define ID_MATRIX_BT709                40111
+#define ID_MATRIX_BT2020               40112
+#define ID_MATRIX_END                  40112
+
+#define ID_FLIP_VERTICAL               40120
 
 // Next default values for new objects
 // 

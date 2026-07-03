@@ -6,4 +6,5 @@ UpgradeLog.htm
 yuvplayer/Debug/
 yuvplayer/Release/
 yuvplayer/yuvplayer.vcxproj.user
-
+*.yuv
+*.raw

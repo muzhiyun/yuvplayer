@@ -48,7 +48,27 @@
 #define MARGIN 2
 #define MAX_PATH_LEN 1024
 
-enum color_format { YUV420_10BE, YUV420_10LE, YUV444, YUV422, YUV420, UYVY, YUYV, YYY, PACKED_YUV444, NV12, NV21, RGB32, RGB24, RGB16 };
+enum color_format {
+	// Grayscale
+	YYY, GRAY16,
+	// YUV Planar 8-bit
+	YUV444, YUV422, YUV420, YV12,
+	// YUV Packed 8-bit
+	PACKED_YUV444, UYVY, YUYV,
+	// YUV Semi-planar 8-bit
+	NV12, NV21,
+	// YUV 10-bit Planar
+	YUV420_10LE, YUV420_10BE, YUV444_10LE, YUV444_10BE,
+	// YUV 12-bit Planar
+	YUV420_12LE, YUV420_12BE,
+	// YUV 16-bit Planar
+	YUV420_16LE, YUV420_16BE,
+	// RGB / BGR 8-bit
+	RGB24, RGB32, RGB16,
+	BGR24, BGR32, BGR16,
+	// RGB high bit-depth (16-bit per channel, LE)
+	RGB48, RGBA64
+};
 enum segment_type { SEGMENT16x16 = 1, SEGMENT32x32 = 2, SEGMENT64x64 = 4};
 
 // CyuvplayerDlg dialog
@@ -103,6 +123,22 @@ private:
 	float ratio;
 
 	color_format m_color;
+
+	// Color range and matrix options
+	enum color_range_t { COLOR_RANGE_AUTO = -1, COLOR_RANGE_LIMITED = 0, COLOR_RANGE_FULL = 1 };
+	enum color_matrix_t { COLOR_MATRIX_BT601 = 0, COLOR_MATRIX_BT709 = 1, COLOR_MATRIX_BT2020 = 2 };
+	color_range_t m_colorRange;
+	color_matrix_t m_colorMatrix;
+	BOOL m_verticalFlip;
+
+	// yuv2rgb LUTs (precomputed for current range/matrix)
+	int m_lut_cr[256];   // cr_coeff * (V - 128)
+	int m_lut_cb[256];   // cb_coeff * (U - 128)
+	int m_lut_cgv[256];  // cgv_coeff * (V - 128)
+	int m_lut_cgu[256];  // cgu_coeff * (U - 128)
+	int m_lut_cy[256];   // cy_coeff * (Y - y_offset)
+	int m_lut_cy_full[256]; // cy_coeff * Y (for full range, no offset)
+	int m_y_offset;      // 16 for limited, 0 for full
 	
 	CBitmapButton m_open_btn;
 	CBitmapButton m_rewind_btn;
@@ -119,6 +155,7 @@ private:
 	void UpdateParameter(void);
 	void LoadFrame(void);
 	void yuv2rgb(void);
+	void InitYuv2rgbLUT(void);
 	void fforward(void);
 	void rewind(void);
 	void StartTimer(void);
@@ -140,6 +177,9 @@ public:
 	afx_msg void OnColor(UINT nID);
 	afx_msg void OnZoom(UINT nID);
 	afx_msg void OnSegment(UINT nID );
+	afx_msg void OnColorRange(UINT nID);
+	afx_msg void OnColorMatrix(UINT nID);
+	afx_msg void OnVerticalFlip();
 
 	afx_msg void OnBnClickedRewind();
 	afx_msg void OnBnClickedPlay();
