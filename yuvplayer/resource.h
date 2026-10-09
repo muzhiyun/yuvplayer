@@ -68,22 +68,32 @@
 #define ID_COLOR_YUV420_16BE            40024
 #define ID_COLOR_RGB48                  40025
 #define ID_COLOR_RGBA64                 40026
-#define ID_COLOR_END                    40026
+#define ID_COLOR_YVYU                   40027
+#define ID_COLOR_VYUY                   40028
+#define ID_COLOR_NV16                   40029
+#define ID_COLOR_NV61                   40030
+#define ID_COLOR_NV24                   40031
+#define ID_COLOR_NV42                   40032
+#define ID_COLOR_RGB555                 40033
+#define ID_COLOR_BGR555                 40034
+#define ID_COLOR_RGBA5551               40035
+#define ID_COLOR_END                    40035
 
-#define ID_SIZE_START                   40020
-#define ID_SIZE_8K						40020
-#define ID_SIZE_4K						40021
-#define ID_SIZE_WQHD                    40022
-#define ID_SIZE_FHD                     40023
-#define ID_SIZE_HD                      40024
-#define ID_SIZE_VGA                     40025
-#define ID_SIZE_WVGA                    40026
-#define ID_SIZE_WQVGA                   40027
-#define ID_SIZE_CIF                     40028
-#define ID_SIZE_QCIF                    40029
-#define ID_SIZE_192X256                 40030
-#define ID_SIZE_CUSTOM                  40031
-#define ID_SIZE_END                     40031
+// Size IDs moved to 40140+ to avoid overlap with color range 40000-40035
+#define ID_SIZE_START                   40140
+#define ID_SIZE_8K						40140
+#define ID_SIZE_4K						40141
+#define ID_SIZE_WQHD                    40142
+#define ID_SIZE_FHD                     40143
+#define ID_SIZE_HD                      40144
+#define ID_SIZE_VGA                     40145
+#define ID_SIZE_WVGA                    40146
+#define ID_SIZE_WQVGA                   40147
+#define ID_SIZE_CIF                     40148
+#define ID_SIZE_QCIF                    40149
+#define ID_SIZE_192X256                 40150
+#define ID_SIZE_CUSTOM                  40151
+#define ID_SIZE_END                     40151
 
 #define ID_ZOOM_START                   40040
 #define ID_ZOOM_41                      40040
@@ -112,6 +122,9 @@
 #define ID_MATRIX_END                  40112
 
 #define ID_FLIP_VERTICAL               40120
+
+#define ID_FRAME_PREV                  40130
+#define ID_FRAME_NEXT                  40131
 
 // Next default values for new objects
 // 

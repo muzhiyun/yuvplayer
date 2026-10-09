@@ -54,9 +54,9 @@ enum color_format {
 	// YUV Planar 8-bit
 	YUV444, YUV422, YUV420, YV12,
 	// YUV Packed 8-bit
-	PACKED_YUV444, UYVY, YUYV,
+	PACKED_YUV444, UYVY, YUYV, YVYU, VYUY,
 	// YUV Semi-planar 8-bit
-	NV12, NV21,
+	NV12, NV21, NV16, NV61, NV24, NV42,
 	// YUV 10-bit Planar
 	YUV420_10LE, YUV420_10BE, YUV444_10LE, YUV444_10BE,
 	// YUV 12-bit Planar
@@ -64,8 +64,8 @@ enum color_format {
 	// YUV 16-bit Planar
 	YUV420_16LE, YUV420_16BE,
 	// RGB / BGR 8-bit
-	RGB24, RGB32, RGB16,
-	BGR24, BGR32, BGR16,
+	RGB24, RGB32, RGB16, RGB555, RGBA5551,
+	BGR24, BGR32, BGR16, BGR555,
 	// RGB high bit-depth (16-bit per channel, LE)
 	RGB48, RGBA64
 };
@@ -192,6 +192,8 @@ public:
 	afx_msg void OnDestroy();
 	afx_msg void OnDropFiles(HDROP hDropInfo);
 	afx_msg void OnFileGo();
+	afx_msg void OnFramePrev();
+	afx_msg void OnFrameNext();
 	afx_msg void OnContextMenu(CWnd* /*pWnd*/, CPoint /*point*/);
 	afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
 	afx_msg void OnCmenuSaveLuminance();

@@ -1,7 +1,7 @@
 # yuvplayer
 
 Lightweight YUV/RGB raw data viewer with OpenGL rendering.  
-Supports 27+ color formats, multiple bit depths, color matrix selection, and real-time pixel inspection.
+Supports 36 color formats, multiple bit depths, color matrix selection, and real-time pixel inspection.
 
 ---
 
@@ -15,12 +15,15 @@ Supports 27+ color formats, multiple bit depths, color matrix selection, and rea
 
 ### YUV Packed / Semi-planar
 * YUV444 (Packed)
-* UYVY, YUYV
-* NV12, NV21
+* UYVY, YUYV, YVYU, VYUY
+* NV12, NV21 (420SP)
+* NV16, NV61 (422SP)
+* NV24, NV42 (444SP)
 
 ### RGB / BGR (8-bit)
-* RGB24 (RGB888), RGB32 (RGBA8888), RGB16 (RGB565)  
-* BGR24 (BGR888), BGR32 (BGRA8888), BGR16 (BGR565)
+* RGB24 (RGB888), RGB32 (RGBA8888), RGB16 (RGB565)
+* RGB555 (XRGB1555), RGBA5551
+* BGR24 (BGR888), BGR32 (BGRA8888), BGR16 (BGR565), BGR555
 
 ### RGB High Bit-depth
 * RGB48 (16-bit/channel, LE)
@@ -38,7 +41,7 @@ Supports 27+ color formats, multiple bit depths, color matrix selection, and rea
 * **Zoom**: 4:1 ~ 1:8
 * **Vertical Flip**: toggle for bottom-up formats
 * **Real-time Pixel Info**: mouse hover shows (x,y) and [R,G,B] in title bar
-* **Frame Navigation**: slider, keyboard arrows, goto dialog
+* **Frame Navigation**: menu (Frame menu), slider, keyboard (`→`/`←`, `d`/`f`), goto dialog
 * **Playback**: play/pause at 30 fps
 * **Segment Overlay**: 64x64 / 32x32 / 16x16 grid markers
 * **Save**: frame as YUV444/422/420 or BMP
@@ -51,18 +54,14 @@ Supports 27+ color formats, multiple bit depths, color matrix selection, and rea
 
 | Key | Action |
 |-----|--------|
-| `→` | Frame forward |
-| `←` | Frame backward |
+| `→` / `f` | Next frame |
+| `←` / `d` | Previous frame |
 | `↑` | Zoom in |
 | `↓` | Zoom out |
 | `p` / `Space` | Play / Pause toggle |
 | `o` | Open file |
 | `g` | Go to frame |
 | `x` | Exit |
-| `f` | Set size to 1080p (FHD) |
-| `h` | Set size to 720p (HD) |
-| `c` | Set size to CIF (352×288) |
-| `q` | Set size to QCIF (176×144) |
 
 ---
 

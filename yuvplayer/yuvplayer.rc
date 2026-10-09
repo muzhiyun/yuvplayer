@@ -104,8 +104,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,6,0,0
- PRODUCTVERSION 2,6,0,0
+ FILEVERSION 2,6,1,0
+ PRODUCTVERSION 2,6,1,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -121,12 +121,12 @@ BEGIN
         BLOCK "080004e4"
         BEGIN
             VALUE "FileDescription", "YUV file viewer"
-            VALUE "FileVersion", "2.6.0.0"
+            VALUE "FileVersion", "2.6.1.0"
             VALUE "InternalName", "yuvplayer.exe"
             VALUE "LegalCopyright", "Copyright Tae-young (c).  All rights reserved."
             VALUE "OriginalFilename", "yuvplayer.exe"
             VALUE "ProductName", "YUVplayer"
-            VALUE "ProductVersion", "2.6.0.0"
+            VALUE "ProductVersion", "2.6.1.0"
         END
     END
     BLOCK "VarFileInfo"
@@ -180,6 +180,11 @@ BEGIN
         MENUITEM "&Go",                         ID_FILE_GO
         MENUITEM "E&xit",                       ID_FILE_EXIT
     END
+    POPUP "F&rame"
+    BEGIN
+        MENUITEM "&Previous Frame\tD",          ID_FRAME_PREV
+        MENUITEM "&Next Frame\tF",              ID_FRAME_NEXT
+    END
     POPUP "&Size"
     BEGIN
         MENUITEM "8K (7680x4320)"               ID_SIZE_8K
@@ -218,13 +223,20 @@ BEGIN
             MENUITEM "YUV420 16bit LE",         ID_COLOR_YUV420_16LE
             MENUITEM "YUV420 16bit BE",         ID_COLOR_YUV420_16BE
         END
-        POPUP "YUV Packed"
+        POPUP "YUV Packed / Semi-planar"
         BEGIN
             MENUITEM "YUV444 (Packed)",         ID_COLOR_PACKEDYUV444
             MENUITEM "UYVY",                    ID_COLOR_UYVY
             MENUITEM "YUYV",                    ID_COLOR_YUYV
+            MENUITEM "YVYU",                    ID_COLOR_YVYU
+            MENUITEM "VYUY",                    ID_COLOR_VYUY
+            MENUITEM SEPARATOR
             MENUITEM "NV12",                    ID_COLOR_NV12
             MENUITEM "NV21",                    ID_COLOR_NV21
+            MENUITEM "NV16 (422SP)",            ID_COLOR_NV16
+            MENUITEM "NV61 (422SP VU)",         ID_COLOR_NV61
+            MENUITEM "NV24 (444SP)",            ID_COLOR_NV24
+            MENUITEM "NV42 (444SP VU)",         ID_COLOR_NV42
         END
         MENUITEM SEPARATOR
         POPUP "RGB / BGR"
@@ -232,10 +244,13 @@ BEGIN
             MENUITEM "RGB24 (RGB888)",          ID_COLOR_RGB24
             MENUITEM "RGB32 (RGBA8888)",        ID_COLOR_RGB32
             MENUITEM "RGB16 (RGB565)",          ID_COLOR_RGB16
+            MENUITEM "RGB555 (XRGB1555)",       ID_COLOR_RGB555
+            MENUITEM "RGBA5551",                ID_COLOR_RGBA5551
             MENUITEM SEPARATOR
             MENUITEM "BGR24 (BGR888)",          ID_COLOR_BGR24
             MENUITEM "BGR32 (BGRA8888)",        ID_COLOR_BGR32
             MENUITEM "BGR16 (BGR565)",          ID_COLOR_BGR16
+            MENUITEM "BGR555",                  ID_COLOR_BGR555
             MENUITEM SEPARATOR
             MENUITEM "RGB48 (16-bit/ch)",       ID_COLOR_RGB48
             MENUITEM "RGBA64 (16-bit/ch)",      ID_COLOR_RGBA64

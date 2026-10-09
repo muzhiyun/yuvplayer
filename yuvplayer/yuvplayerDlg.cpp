@@ -171,6 +171,8 @@ BEGIN_MESSAGE_MAP(CyuvplayerDlg, CDialog)
 	ON_COMMAND(ID_OPEN, &CyuvplayerDlg::OnOpen)
 	ON_COMMAND(ID_FILE_RELOAD, &CyuvplayerDlg::OnFileReload)
 	ON_COMMAND(ID_FILE_EXIT, &CyuvplayerDlg::OnFileExit)
+	ON_COMMAND(ID_FRAME_PREV, &CyuvplayerDlg::OnFramePrev)
+	ON_COMMAND(ID_FRAME_NEXT, &CyuvplayerDlg::OnFrameNext)
 
 	ON_COMMAND_RANGE(ID_SIZE_START,  ID_SIZE_END,  OnSizeChange)
 	ON_COMMAND_RANGE(ID_COLOR_START, ID_COLOR_END, OnColor)
@@ -760,8 +762,9 @@ void CyuvplayerDlg::yuv2rgb(void)
 			line += y_step * (t_width << 2);
 		}
 	}
-	// ========== Planar YUV420 + YV12 + NV12 + NV21 ==========
-	else if (m_color == YUV420 || m_color == YV12 || m_color == NV12 || m_color == NV21) {
+	// ========== Planar YUV420 + YV12 + Semi-planar NV12/NV21/NV16/NV61/NV24/NV42 ==========
+	else if (m_color == YUV420 || m_color == YV12 || m_color == NV12 || m_color == NV21
+		  || m_color == NV16 || m_color == NV61 || m_color == NV24 || m_color == NV42) {
 		stride_uv = (width + 1) >> 1;
 		for (j = y_start; j != y_end; j += y_step) {
 			cur = line;
@@ -779,9 +782,27 @@ void CyuvplayerDlg::yuv2rgb(void)
 					U = misc[(j >> 1) * width + ((i >> 1) << 1)];
 					V = misc[(j >> 1) * width + ((i >> 1) << 1) + 1];
 				}
-				else { // NV21
+				else if (m_color == NV21) {
 					V = misc[(j >> 1) * width + ((i >> 1) << 1)];
 					U = misc[(j >> 1) * width + ((i >> 1) << 1) + 1];
+				}
+				else if (m_color == NV16) {
+					// 422 semi-planar: UV row stride = width, every row
+					U = misc[j * width + ((i >> 1) << 1)];
+					V = misc[j * width + ((i >> 1) << 1) + 1];
+				}
+				else if (m_color == NV61) {
+					V = misc[j * width + ((i >> 1) << 1)];
+					U = misc[j * width + ((i >> 1) << 1) + 1];
+				}
+				else if (m_color == NV24) {
+					// 444 semi-planar: UV row stride = 2*width
+					U = misc[j * (width << 1) + (i << 1)];
+					V = misc[j * (width << 1) + (i << 1) + 1];
+				}
+				else { // NV42
+					V = misc[j * (width << 1) + (i << 1)];
+					U = misc[j * (width << 1) + (i << 1) + 1];
 				}
 				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
 				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
@@ -824,6 +845,48 @@ void CyuvplayerDlg::yuv2rgb(void)
 				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
 				cur++;
 				Y = src[2];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+				src += 4;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== Packed YUV422: YVYU ==========
+	else if (m_color == YVYU) {
+		src = misc;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i += 2) {
+				Y = src[0];  V = src[1];  U = src[3];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+				Y = src[2];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+				src += 4;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== Packed YUV422: VYUY ==========
+	else if (m_color == VYUY) {
+		src = misc;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i += 2) {
+				V = src[0];  Y = src[1];  U = src[2];
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
+				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
+				cur++;
+				Y = src[3];
 				*cur++ = clip((m_lut_cy[Y] + m_lut_cr[V] + 128) >> 8);
 				*cur++ = clip((m_lut_cy[Y] + m_lut_cgu[U] + m_lut_cgv[V] + 128) >> 8);
 				*cur++ = clip((m_lut_cy[Y] + m_lut_cb[U] + 128) >> 8);
@@ -927,6 +990,36 @@ void CyuvplayerDlg::yuv2rgb(void)
 			line += y_step * (t_width << 2);
 		}
 	}
+	// ========== RGB555 (XRGB1555: bit15 unused, R=14-10, G=9-5, B=4-0) ==========
+	else if (m_color == RGB555) {
+		rgb16 = (unsigned short*)misc;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				unsigned short p = rgb16[j * width + i];
+				*cur++ = ((p >> 10) & 0x1F) << 3;
+				*cur++ = ((p >> 5) & 0x1F) << 3;
+				*cur++ = (p & 0x1F) << 3;
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== RGBA5551 (R=15-11, G=10-6, B=5-1, A=0) ==========
+	else if (m_color == RGBA5551) {
+		rgb16 = (unsigned short*)misc;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				unsigned short p = rgb16[j * width + i];
+				*cur++ = ((p >> 11) & 0x1F) << 3;
+				*cur++ = ((p >> 6) & 0x1F) << 3;
+				*cur++ = ((p >> 1) & 0x1F) << 3;
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
 	// ========== BGR24 ==========
 	else if (m_color == BGR24) {
 		for (j = y_start; j != y_end; j += y_step) {
@@ -963,6 +1056,21 @@ void CyuvplayerDlg::yuv2rgb(void)
 				*cur++ = (p & 0x1F) << 3;
 				*cur++ = ((p >> 5) & 0x3F) << 2;
 				*cur++ = ((p >> 11) & 0x1F) << 3;
+				cur++;
+			}
+			line += y_step * (t_width << 2);
+		}
+	}
+	// ========== BGR555 (bit15 unused, B=14-10, G=9-5, R=4-0) ==========
+	else if (m_color == BGR555) {
+		rgb16 = (unsigned short*)misc;
+		for (j = y_start; j != y_end; j += y_step) {
+			cur = line;
+			for (i = 0; i < width; i++) {
+				unsigned short p = rgb16[j * width + i];
+				*cur++ = (p & 0x1F) << 3;
+				*cur++ = ((p >> 5) & 0x1F) << 3;
+				*cur++ = ((p >> 10) & 0x1F) << 3;
 				cur++;
 			}
 			line += y_step * (t_width << 2);
@@ -1069,6 +1177,16 @@ void CyuvplayerDlg::OnColor(UINT nID )
 			m_color = YUYV;
 			break;
 
+		case ID_COLOR_YVYU:
+			menu->CheckMenuItem( ID_COLOR_YVYU, MF_CHECKED);
+			m_color = YVYU;
+			break;
+
+		case ID_COLOR_VYUY:
+			menu->CheckMenuItem( ID_COLOR_VYUY, MF_CHECKED);
+			m_color = VYUY;
+			break;
+
 		case ID_COLOR_NV12:
 			menu->CheckMenuItem( ID_COLOR_NV12, MF_CHECKED);
 			m_color = NV12;
@@ -1077,6 +1195,26 @@ void CyuvplayerDlg::OnColor(UINT nID )
 		case ID_COLOR_NV21:
 			menu->CheckMenuItem( ID_COLOR_NV21, MF_CHECKED);
 			m_color = NV21;
+			break;
+
+		case ID_COLOR_NV16:
+			menu->CheckMenuItem( ID_COLOR_NV16, MF_CHECKED);
+			m_color = NV16;
+			break;
+
+		case ID_COLOR_NV61:
+			menu->CheckMenuItem( ID_COLOR_NV61, MF_CHECKED);
+			m_color = NV61;
+			break;
+
+		case ID_COLOR_NV24:
+			menu->CheckMenuItem( ID_COLOR_NV24, MF_CHECKED);
+			m_color = NV24;
+			break;
+
+		case ID_COLOR_NV42:
+			menu->CheckMenuItem( ID_COLOR_NV42, MF_CHECKED);
+			m_color = NV42;
 			break;
 
 		// 10-bit YUV formats
@@ -1138,6 +1276,16 @@ void CyuvplayerDlg::OnColor(UINT nID )
 			m_color = RGB16;
 			break;
 
+		case ID_COLOR_RGB555:
+			menu->CheckMenuItem( ID_COLOR_RGB555, MF_CHECKED);
+			m_color = RGB555;
+			break;
+
+		case ID_COLOR_RGBA5551:
+			menu->CheckMenuItem( ID_COLOR_RGBA5551, MF_CHECKED);
+			m_color = RGBA5551;
+			break;
+
 		// BGR formats (B at byte 0, same as old "RGB" behavior)
 		case ID_COLOR_BGR24:
 			menu->CheckMenuItem( ID_COLOR_BGR24, MF_CHECKED);
@@ -1152,6 +1300,11 @@ void CyuvplayerDlg::OnColor(UINT nID )
 		case ID_COLOR_BGR16:
 			menu->CheckMenuItem( ID_COLOR_BGR16, MF_CHECKED);
 			m_color = BGR16;
+			break;
+
+		case ID_COLOR_BGR555:
+			menu->CheckMenuItem( ID_COLOR_BGR555, MF_CHECKED);
+			m_color = BGR555;
 			break;
 
 		// High bit-depth RGB
@@ -1197,9 +1350,11 @@ void CyuvplayerDlg::UpdateParameter()
 	frame_size_y = width*height;
 
 	// UV stride and size based on chroma subsampling
-	if (m_color == YUV444 || m_color == PACKED_YUV444 || m_color == YUV444_10LE || m_color == YUV444_10BE)
+	if (m_color == YUV444 || m_color == PACKED_YUV444 || m_color == YUV444_10LE || m_color == YUV444_10BE
+		|| m_color == NV24 || m_color == NV42)
 		frame_size_uv = width*height;
-	else if (m_color == YUV422 || m_color == UYVY || m_color == YUYV)
+	else if (m_color == YUV422 || m_color == UYVY || m_color == YUYV || m_color == YVYU || m_color == VYUY
+		|| m_color == NV16 || m_color == NV61)
 		frame_size_uv = ((width+1)>>1)*height;
 	else if (m_color == YUV420 || m_color == YV12 || m_color == NV12 || m_color == NV21 
 			|| m_color == YUV420_10LE || m_color == YUV420_10BE
@@ -1225,7 +1380,7 @@ void CyuvplayerDlg::UpdateParameter()
 		frame_size = frame_size_y*4;
 	else if (m_color == RGB24 || m_color == BGR24)
 		frame_size = frame_size_y*3;
-	else if (m_color == RGB16 || m_color == BGR16)
+	else if (m_color == RGB16 || m_color == BGR16 || m_color == RGB555 || m_color == BGR555 || m_color == RGBA5551)
 		frame_size = frame_size_y*2;
 	else if (m_color == RGB48)
 		frame_size = frame_size_y*6;   // 3 channels * 2 bytes
@@ -1259,7 +1414,7 @@ void CyuvplayerDlg::LoadFrame(void)
 		_read( fd, misc, frame_size_y*4 );
 	else if( m_color == RGB24 || m_color == BGR24 )
 		_read( fd, misc, frame_size_y*3 );
-	else if( m_color == RGB16 || m_color == BGR16 )
+	else if( m_color == RGB16 || m_color == BGR16 || m_color == RGB555 || m_color == BGR555 || m_color == RGBA5551 )
 		_read( fd, misc, frame_size_y*2 );
 	else if( m_color == RGB48 )
 		_read( fd, misc, frame_size_y*6 );
@@ -1269,16 +1424,14 @@ void CyuvplayerDlg::LoadFrame(void)
 	// Packed YUV: read into misc
 	else if( m_color == PACKED_YUV444 )
 		_read( fd, misc, frame_size );
-	else if( m_color == UYVY )
-		_read( fd, misc, frame_size_y*2 );
-	else if( m_color == YUYV )
+	else if( m_color == UYVY || m_color == YUYV || m_color == YVYU || m_color == VYUY )
 		_read( fd, misc, frame_size_y*2 );
 
-	// Semi-planar: Y into y, UV into misc
-	else if( m_color == NV12 || m_color == NV21)
+	// Semi-planar: Y into y, interleaved UV into misc
+	else if( m_color == NV12 || m_color == NV21 || m_color == NV16 || m_color == NV61 || m_color == NV24 || m_color == NV42)
 	{
 		_read( fd, y,    frame_size_y );
-		_read( fd, misc, frame_size_y/2 );
+		_read( fd, misc, 2*frame_size_uv );
 	}
 
 	// Planar YUV / Grayscale: Y into y, U/V or nothing
@@ -1394,6 +1547,16 @@ void CyuvplayerDlg::OnFileExit()
 	OnOK();
 }
 
+void CyuvplayerDlg::OnFramePrev()
+{
+	rewind();
+}
+
+void CyuvplayerDlg::OnFrameNext()
+{
+	fforward();
+}
+
 BOOL CyuvplayerDlg::PreTranslateMessage(MSG* pMsg) 
 {
 	if(pMsg->message == WM_KEYDOWN){
@@ -1456,28 +1619,14 @@ BOOL CyuvplayerDlg::PreTranslateMessage(MSG* pMsg)
 				OnOpen();
 				return TRUE;
 
+			case 'd':
+			case 'D':
+				rewind();
+				return TRUE;
+
 			case 'f':
 			case 'F':
-				OnSizeChange(ID_SIZE_FHD);
-				return TRUE;
-
-			case 'h':
-			case 'H':
-				OnSizeChange(ID_SIZE_HD);
-				return TRUE;
-
-			case 'c':
-			case 'C':
-				//if( GetKeyState(VK_CONTROL) < 0 ){
-				//	MessageBox(L"hehe");
-				//}
-				//else
-					OnSizeChange(ID_SIZE_CIF);
-				return TRUE;
-
-			case 'q':
-			case 'Q':
-				OnSizeChange(ID_SIZE_QCIF);
+				fforward();
 				return TRUE;
 
 			case 'g':

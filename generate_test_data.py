@@ -276,6 +276,103 @@ def save_yv12(filename, pixels):
     print(f"  Created: {filename} ({os.path.getsize(filename)} bytes)")
 
 
+def rgb_to_yuv(r, g, b):
+    """BT.601 limited range YUV conversion"""
+    y = max(0, min(255, ((66 * r + 129 * g + 25 * b + 128) >> 8) + 16))
+    u = max(0, min(255, ((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128))
+    v = max(0, min(255, ((112 * r - 94 * g - 18 * b + 128) >> 8) + 128))
+    return y, u, v
+
+
+def save_yvyu(filename, pixels):
+    """Save as YVYU packed YUV422 (Y0 V0 Y1 U0)"""
+    with open(filename, 'wb') as f:
+        for i in range(0, len(pixels), 2):
+            y0, u0, v0 = rgb_to_yuv(*pixels[i])
+            y1, _, _ = rgb_to_yuv(*pixels[i + 1])
+            f.write(bytes([y0, v0, y1, u0]))
+    print(f"  Created: {filename} ({os.path.getsize(filename)} bytes)")
+
+
+def save_vyuy(filename, pixels):
+    """Save as VYUY packed YUV422 (V0 Y0 U0 Y1)"""
+    with open(filename, 'wb') as f:
+        for i in range(0, len(pixels), 2):
+            y0, u0, v0 = rgb_to_yuv(*pixels[i])
+            y1, _, _ = rgb_to_yuv(*pixels[i + 1])
+            f.write(bytes([v0, y0, u0, y1]))
+    print(f"  Created: {filename} ({os.path.getsize(filename)} bytes)")
+
+
+def save_nv16(filename, pixels, vu_order=False):
+    """Save as NV16/NV61 (422 semi-planar: Y plane + interleaved UV/VU)"""
+    w, h = WIDTH, HEIGHT
+    y_plane = bytearray(w * h)
+    uv_plane = bytearray(w * h)  # (w/2) pairs * 2 bytes * h rows
+    for idx, (r, g, b) in enumerate(pixels):
+        x = idx % w
+        yv, u, v = rgb_to_yuv(r, g, b)
+        y_plane[idx] = yv
+        if x % 2 == 0:
+            if vu_order:
+                uv_plane[idx] = v
+                uv_plane[idx + 1] = u
+            else:
+                uv_plane[idx] = u
+                uv_plane[idx + 1] = v
+    with open(filename, 'wb') as f:
+        f.write(y_plane)
+        f.write(uv_plane)
+    print(f"  Created: {filename} ({os.path.getsize(filename)} bytes)")
+
+
+def save_nv24(filename, pixels, vu_order=False):
+    """Save as NV24/NV42 (444 semi-planar: Y plane + interleaved UV/VU)"""
+    w, h = WIDTH, HEIGHT
+    y_plane = bytearray(w * h)
+    uv_plane = bytearray(w * h * 2)
+    for idx, (r, g, b) in enumerate(pixels):
+        yv, u, v = rgb_to_yuv(r, g, b)
+        y_plane[idx] = yv
+        if vu_order:
+            uv_plane[idx * 2] = v
+            uv_plane[idx * 2 + 1] = u
+        else:
+            uv_plane[idx * 2] = u
+            uv_plane[idx * 2 + 1] = v
+    with open(filename, 'wb') as f:
+        f.write(y_plane)
+        f.write(uv_plane)
+    print(f"  Created: {filename} ({os.path.getsize(filename)} bytes)")
+
+
+def save_rgb555(filename, pixels):
+    """Save as RGB555 / XRGB1555 (X bit15, R=14-10, G=9-5, B=4-0)"""
+    with open(filename, 'wb') as f:
+        for r, g, b in pixels:
+            val = ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)
+            f.write(struct.pack('<H', val))
+    print(f"  Created: {filename} ({os.path.getsize(filename)} bytes)")
+
+
+def save_bgr555(filename, pixels):
+    """Save as BGR555 (X bit15, B=14-10, G=9-5, R=4-0)"""
+    with open(filename, 'wb') as f:
+        for r, g, b in pixels:
+            val = ((b >> 3) << 10) | ((g >> 3) << 5) | (r >> 3)
+            f.write(struct.pack('<H', val))
+    print(f"  Created: {filename} ({os.path.getsize(filename)} bytes)")
+
+
+def save_rgba5551(filename, pixels):
+    """Save as RGBA5551 (R=15-11, G=10-6, B=5-1, A=0)"""
+    with open(filename, 'wb') as f:
+        for r, g, b in pixels:
+            val = ((r >> 3) << 11) | ((g >> 3) << 6) | ((b >> 3) << 1) | 1
+            f.write(struct.pack('<H', val))
+    print(f"  Created: {filename} ({os.path.getsize(filename)} bytes)")
+
+
 def save_gray16(filename, pixels):
     """Save as 16-bit grayscale LE"""
     with open(filename, 'wb') as f:
@@ -303,6 +400,9 @@ def main():
     save_bgr565(os.path.join(output_dir, "test_bgr16_352x288.raw"), pixels)
     save_rgb48(os.path.join(output_dir, "test_rgb48_352x288.raw"), pixels)
     save_rgba64(os.path.join(output_dir, "test_rgba64_352x288.raw"), pixels)
+    save_rgb555(os.path.join(output_dir, "test_rgb555_352x288.raw"), pixels)
+    save_bgr555(os.path.join(output_dir, "test_bgr555_352x288.raw"), pixels)
+    save_rgba5551(os.path.join(output_dir, "test_rgba5551_352x288.raw"), pixels)
     
     # YUV formats
     print()
@@ -314,6 +414,12 @@ def main():
     save_yuv420_16le(os.path.join(output_dir, "test_yuv420_16le_352x288.yuv"), pixels)
     save_yuv444_10le(os.path.join(output_dir, "test_yuv444_10le_352x288.yuv"), pixels)
     save_yv12(os.path.join(output_dir, "test_yv12_352x288.yuv"), pixels)
+    save_yvyu(os.path.join(output_dir, "test_yvyu_352x288.yuv"), pixels)
+    save_vyuy(os.path.join(output_dir, "test_vyuy_352x288.yuv"), pixels)
+    save_nv16(os.path.join(output_dir, "test_nv16_352x288.yuv"), pixels)
+    save_nv16(os.path.join(output_dir, "test_nv61_352x288.yuv"), pixels, vu_order=True)
+    save_nv24(os.path.join(output_dir, "test_nv24_352x288.yuv"), pixels)
+    save_nv24(os.path.join(output_dir, "test_nv42_352x288.yuv"), pixels, vu_order=True)
     
     # Grayscale
     print()
