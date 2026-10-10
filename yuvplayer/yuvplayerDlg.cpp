@@ -37,6 +37,7 @@
 
 #include "SizeDialog.h"
 #include "GoDialog.h"
+#include "AboutDialog.h"
 
 #include <math.h>
 #include <io.h>
@@ -173,6 +174,7 @@ BEGIN_MESSAGE_MAP(CyuvplayerDlg, CDialog)
 	ON_COMMAND(ID_FILE_EXIT, &CyuvplayerDlg::OnFileExit)
 	ON_COMMAND(ID_FRAME_PREV, &CyuvplayerDlg::OnFramePrev)
 	ON_COMMAND(ID_FRAME_NEXT, &CyuvplayerDlg::OnFrameNext)
+	ON_COMMAND(ID_HELP_ABOUT, &CyuvplayerDlg::OnHelpAbout)
 
 	ON_COMMAND_RANGE(ID_SIZE_START,  ID_SIZE_END,  OnSizeChange)
 	ON_COMMAND_RANGE(ID_COLOR_START, ID_COLOR_END, OnColor)
@@ -292,29 +294,9 @@ void CyuvplayerDlg::Resize(int width, int height)
 	for( t_width = 2  ; t_width  < width  ; t_width  *= 2 );
 	for( t_height = 2 ; t_height < height ; t_height *= 2 );
 
-	if( y != NULL ) delete y;
-	if( u != NULL ) delete u;
-	if( v != NULL ) delete v;
+	// (Re)allocate all frame buffers with exact sizes for the new geometry/format
+	AllocBuffers();
 
-	if( rgba != NULL ) delete rgba;
-	if( misc != NULL ) delete misc;
-	
-	if( segment != NULL) delete segment;
-
-	y = new unsigned char[width*height*2];
-	u = new unsigned char[width*height*2];
-	v = new unsigned char[width*height*2];
-	
-	rgba    = new unsigned char[t_width*t_height*4];
-	segment = new unsigned char[t_width*t_height*4];
-	
-	// reset alpha value to 255
-	memset( rgba, 255, sizeof(unsigned char)*t_width*t_height*4 );
-
-	// used for NV12, NV21, UYVY, RGB32, RGB24, RGB16, BGR32, BGR24, BGR16, RGB48, RGBA64
-	// Allocate max possible size: RGBA64 needs width*height*8
-	misc = new unsigned char[width*height*8];
-	
 	UpdateParameter();
 	OpenGLView->SetParam( t_width, t_height, ratio);
 	
@@ -1330,23 +1312,16 @@ void CyuvplayerDlg::OnColor(UINT nID )
 			m_color = YYY;
 			
 	}
+	AllocBuffers();
 	UpdateParameter();
 	LoadFrame();
 
 }
 
-void CyuvplayerDlg::UpdateParameter()
+// Compute frame_size_y / frame_size_uv / frame_size for the current geometry
+// and color format. Has no file dependency, safe to call at any time.
+void CyuvplayerDlg::ComputeFrameSizes(void)
 {
-	__int64 size;
-
-	if( fd < 0 ){
-		count = 0;
-		return;
-	}
-
-	_lseeki64( fd, 0, SEEK_END );
-	size = _telli64(fd);
-
 	frame_size_y = width*height;
 
 	// UV stride and size based on chroma subsampling
@@ -1388,6 +1363,79 @@ void CyuvplayerDlg::UpdateParameter()
 		frame_size = frame_size_y*8;   // 4 channels * 2 bytes
 	else 
 		frame_size = frame_size_y + 2*frame_size_uv;
+}
+
+// (Re)allocate frame buffers with exact sizes for the current geometry & format.
+// Keeps memory usage minimal (important for 32-bit builds and wide images
+// such as 16384x1548, where oversized buffers cause "out of memory").
+void CyuvplayerDlg::AllocBuffers(void)
+{
+	// Release old buffers
+	if( y != NULL ) { delete[] y; y = NULL; }
+	if( u != NULL ) { delete[] u; u = NULL; }
+	if( v != NULL ) { delete[] v; v = NULL; }
+	if( rgba != NULL ) { delete[] rgba; rgba = NULL; }
+	if( segment != NULL ) { delete[] segment; segment = NULL; }
+	if( misc != NULL ) { delete[] misc; misc = NULL; }
+
+	ComputeFrameSizes();
+
+	// Y plane: exactly the size LoadFrame() reads for this format
+	int y_size = frame_size_y;
+	if( y_size < 1 ) y_size = 1;
+
+	// U/V planes: cover both the loaded chroma data and the RGB->YUV
+	// export path, which writes up to width*height samples per plane
+	int uv_size = frame_size_uv;
+	if( uv_size < width*height ) uv_size = width*height;
+	if( uv_size < 1 ) uv_size = 1;
+
+	y = new unsigned char[y_size];
+	u = new unsigned char[uv_size];
+	v = new unsigned char[uv_size];
+
+	// misc buffer: exact max bytes LoadFrame() reads into it for this format
+	int misc_size;
+	if (m_color == RGB32 || m_color == BGR32)
+		misc_size = width*height*4;
+	else if (m_color == RGB24 || m_color == BGR24 || m_color == PACKED_YUV444)
+		misc_size = width*height*3;
+	else if (m_color == RGB16 || m_color == BGR16 || m_color == RGB555 || m_color == BGR555 || m_color == RGBA5551
+		  || m_color == UYVY || m_color == YUYV || m_color == YVYU || m_color == VYUY)
+		misc_size = width*height*2;
+	else if (m_color == RGB48)
+		misc_size = width*height*6;
+	else if (m_color == RGBA64)
+		misc_size = width*height*8;
+	else if (m_color == NV12 || m_color == NV21 || m_color == NV16 || m_color == NV61
+		  || m_color == NV24 || m_color == NV42)
+		misc_size = 2*frame_size_uv;   // interleaved UV plane
+	else
+		misc_size = 1;                 // planar formats don't use misc
+
+	misc = new unsigned char[misc_size];
+
+	// RGBA texture buffer + segment overlay (power-of-two texture size)
+	rgba    = new unsigned char[t_width*t_height*4];
+	segment = new unsigned char[t_width*t_height*4];
+
+	// reset alpha value to 255
+	memset( rgba, 255, sizeof(unsigned char)*t_width*t_height*4 );
+}
+
+void CyuvplayerDlg::UpdateParameter()
+{
+	__int64 size;
+
+	if( fd < 0 ){
+		count = 0;
+		return;
+	}
+
+	_lseeki64( fd, 0, SEEK_END );
+	size = _telli64(fd);
+
+	ComputeFrameSizes();
 
 	count = (int)(size / frame_size);
 
@@ -1557,6 +1605,13 @@ void CyuvplayerDlg::OnFrameNext()
 	fforward();
 }
 
+// ========== About dialog: version / git info / build date ==========
+void CyuvplayerDlg::OnHelpAbout()
+{
+	CAboutDialog dlg(this);
+	dlg.DoModal();
+}
+
 BOOL CyuvplayerDlg::PreTranslateMessage(MSG* pMsg) 
 {
 	if(pMsg->message == WM_KEYDOWN){
@@ -1651,12 +1706,13 @@ void CyuvplayerDlg::OnDestroy()
 	// TODO: Add your message handler code here
 	delete customDlg;
 
-	if( y != NULL ) delete y;
-	if( u != NULL ) delete u;
-	if( v != NULL ) delete v;
+	if( y != NULL ) delete[] y;
+	if( u != NULL ) delete[] u;
+	if( v != NULL ) delete[] v;
 	
-	if( rgba != NULL ) delete rgba;
-	if( misc != NULL ) delete misc;
+	if( rgba != NULL ) delete[] rgba;
+	if( segment != NULL ) delete[] segment;
+	if( misc != NULL ) delete[] misc;
 
 	if( fd > -1 ) _close(fd);
 }

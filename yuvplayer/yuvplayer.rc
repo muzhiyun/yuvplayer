@@ -61,7 +61,7 @@ END
 //
 
 IDD_YUVPLAYER_DIALOG DIALOGEX 0, 0, 320, 200
-STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX
 EXSTYLE WS_EX_APPWINDOW
 CAPTION "YUVplayer"
 MENU IDR_MAIN_MENU
@@ -97,6 +97,22 @@ BEGIN
     LTEXT           "Frame No",IDC_STATIC,7,8,33,10
 END
 
+IDD_ABOUT_DIALOG DIALOGEX 0, 0, 248, 130
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | DS_CENTER | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "About yuvplayer"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    ICON            IDR_MAINFRAME,IDC_STATIC,14,14,21,21
+    LTEXT           "yuvplayer",IDC_ABOUT_VERSION,46,12,188,15
+    LTEXT           "Git commit:",IDC_ABOUT_COMMIT,46,34,188,10
+    LTEXT           "Build date:",IDC_ABOUT_DATE,46,47,188,10
+    LTEXT           "Repo:",IDC_STATIC,46,60,20,10
+    CONTROL         "https://github.com",IDC_ABOUT_REPO,"Static",SS_NOTIFY | SS_LEFT | WS_TABSTOP,65,60,169,10
+    CONTROL         "",IDC_STATIC,"Static",SS_ETCHEDHORZ,14,75,220,1
+    LTEXT           "tagline",IDC_ABOUT_TAGLINE,46,82,188,26
+    DEFPUSHBUTTON   "OK",IDOK,188,107,46,16
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -104,8 +120,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,6,1,0
- PRODUCTVERSION 2,6,1,0
+ FILEVERSION YUVPLAYER_VER_RC
+ PRODUCTVERSION YUVPLAYER_VER_RC
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -121,12 +137,12 @@ BEGIN
         BLOCK "080004e4"
         BEGIN
             VALUE "FileDescription", "YUV file viewer"
-            VALUE "FileVersion", "2.6.1.0"
+            VALUE "FileVersion", YUVPLAYER_VER_FULL_STR
             VALUE "InternalName", "yuvplayer.exe"
             VALUE "LegalCopyright", "Copyright Tae-young (c).  All rights reserved."
             VALUE "OriginalFilename", "yuvplayer.exe"
             VALUE "ProductName", "YUVplayer"
-            VALUE "ProductVersion", "2.6.1.0"
+            VALUE "ProductVersion", YUVPLAYER_VER_FULL_STR
         END
     END
     BLOCK "VarFileInfo"
@@ -290,6 +306,10 @@ BEGIN
     POPUP "&View"
     BEGIN
         MENUITEM "&Vertical Flip",              ID_FLIP_VERTICAL
+    END
+    POPUP "&Help"
+    BEGIN
+        MENUITEM "&About yuvplayer...",         ID_HELP_ABOUT
     END
 END
 

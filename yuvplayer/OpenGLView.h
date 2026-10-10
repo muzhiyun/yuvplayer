@@ -73,6 +73,9 @@ protected:
 	BOOL m_trackingMouse;
 	wchar_t m_savedTitle[1024];
 
+	// Texture size limit warning flag
+	BOOL m_warnedTexLimit;
+
 public:
 	afx_msg BOOL PreCreateWindow(CREATESTRUCT& cs);
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);

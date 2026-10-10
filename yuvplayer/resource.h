@@ -11,6 +11,7 @@
 #define IDI_ICON1                       144
 #define IDR_CMENU                       145
 #define IDR_MAINFRAME                   147
+#define IDD_ABOUT_DIALOG                148
 #define IDC_OPEN                        1000
 #define IDC_REWIND                      1001
 #define IDC_PLAY                        1002
@@ -21,6 +22,11 @@
 #define IDC_WIDTH                       1007
 #define IDC_HEIGHT                      1008
 #define IDC_FRAME_NO                    1009
+#define IDC_ABOUT_VERSION               1011
+#define IDC_ABOUT_COMMIT                1012
+#define IDC_ABOUT_DATE                  1013
+#define IDC_ABOUT_REPO                  1014
+#define IDC_ABOUT_TAGLINE               1015
 #define ID_OPEN                         32774
 #define ID_FILE_EXIT                    32791
 #define ID_FILE_GO                      32792
@@ -126,13 +132,29 @@
 #define ID_FRAME_PREV                  40130
 #define ID_FRAME_NEXT                  40131
 
+#define ID_HELP_ABOUT                  40160
+
+// ============================================================
+// Version - single source of truth
+// (used by the VERSIONINFO resource and the About dialog)
+// ============================================================
+#define YUVPLAYER_VER_MAJOR            2
+#define YUVPLAYER_VER_MINOR            6
+#define YUVPLAYER_VER_PATCH            2
+#define YUVPLAYER_VER_BUILD            0
+#define YUVPLAYER_VER_RC               YUVPLAYER_VER_MAJOR,YUVPLAYER_VER_MINOR,YUVPLAYER_VER_PATCH,YUVPLAYER_VER_BUILD
+#define YUVPLAYER_VER_STR              "2.6.2"
+#define YUVPLAYER_VER_FULL_STR         "2.6.2.0"
+
+#define YUVPLAYER_TAGLINE              "Raw data never lies; it only waits to be understood."
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        148
+#define _APS_NEXT_RESOURCE_VALUE        149
 #define _APS_NEXT_COMMAND_VALUE         32832
-#define _APS_NEXT_CONTROL_VALUE         1011
+#define _APS_NEXT_CONTROL_VALUE         1016
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

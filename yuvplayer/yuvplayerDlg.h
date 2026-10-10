@@ -152,6 +152,8 @@ private:
 	CSizeDialog* customDlg;
 
 	void Resize(int width, int height);
+	void ComputeFrameSizes(void);
+	void AllocBuffers(void);
 	void UpdateParameter(void);
 	void LoadFrame(void);
 	void yuv2rgb(void);
@@ -194,6 +196,7 @@ public:
 	afx_msg void OnFileGo();
 	afx_msg void OnFramePrev();
 	afx_msg void OnFrameNext();
+	afx_msg void OnHelpAbout();
 	afx_msg void OnContextMenu(CWnd* /*pWnd*/, CPoint /*point*/);
 	afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
 	afx_msg void OnCmenuSaveLuminance();

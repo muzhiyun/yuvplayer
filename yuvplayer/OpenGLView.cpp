@@ -56,6 +56,7 @@ COpenGLView::COpenGLView()
 	// Mouse tracking
 	m_trackingMouse = FALSE;
 	m_savedTitle[0] = L'\0';
+	m_warnedTexLimit = FALSE;
 }
 
 COpenGLView::~COpenGLView()
@@ -236,6 +237,23 @@ void COpenGLView::LoadTexture(unsigned char* rgba)
 {
 	// Store pointer for mouse-over pixel reading
 	im = rgba;
+
+	// Check GPU maximum texture size to avoid driver-level failures
+	// (e.g. 16384-wide images on GPUs limited to 8192)
+	GLint maxTexSize = 0;
+	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTexSize);
+	if (maxTexSize > 0 && (t_width > maxTexSize || t_height > maxTexSize)) {
+		if (!m_warnedTexLimit) {
+			m_warnedTexLimit = TRUE;
+			wchar_t msg[256];
+			wsprintf(msg, L"Image texture (%d x %d) exceeds the GPU maximum texture size (%d x %d).\n\n"
+				L"Please reduce the image size (Size -> Custom).",
+				t_width, t_height, (int)maxTexSize, (int)maxTexSize);
+			AfxMessageBox(msg, MB_OK | MB_ICONERROR);
+		}
+		return;
+	}
+	m_warnedTexLimit = FALSE;
 
 	glBindTexture(GL_TEXTURE_2D, texture[0] );
 	if( loaded[0] )
